@@ -1,5 +1,5 @@
 # Standard library imports
-import json
+import yaml
 import logging
 import os
 import re
@@ -60,16 +60,16 @@ def _setup_logging(debug: bool = False):
 
 def _load_cluster_env() -> None:
     """
-    Loads the correct cluster environment variables from `clusters.json` based on the hostname.
+    Loads the correct cluster environment variables from `clusters.yaml` based on the hostname.
     """
-    with open(Path(__file__).parent / "clusters.json", "r") as f:
-        clusters = json.load(f)
+    with open(Path(__file__).parent / "clusters.yaml", "r") as f:
+        clusters = yaml.safe_load(f)
     hostname = socket.gethostname()
 
     # First load shared environment variables
     shared_cfg = clusters.get("shared", {})
 
-    # match hostname to the regex in the clusters.json
+    # match hostname to the regex in the clusters.yaml
     for host in set(clusters.keys()) - {"shared"}:
         pattern = clusters[host]["hostname_pattern"]
         # Convert shell-style wildcards to regex
@@ -304,12 +304,12 @@ def schedule_evals(
     # Ensure that the shared Singularity image derived from the Docker
     # reference is present (or freshly rebuilt if missing). All users on
     # a cluster share the same image under EVAL_SIF_PATH (configured in
-    # clusters.json). This avoids the brittle shared-venv approach.
+    # clusters.yaml). This avoids the brittle shared-venv approach.
     # ------------------------------------------------------------------
     image_name = os.environ.get("EVAL_CONTAINER_IMAGE")
     if image_name is None:
         raise ValueError(
-            "EVAL_CONTAINER_IMAGE is not set. Please set it in clusters.json."
+            "EVAL_CONTAINER_IMAGE is not set. Please set it in clusters.yaml."
         )
 
     ensure_singularity_image(image_name)

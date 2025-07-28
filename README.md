@@ -52,7 +52,7 @@ The `oellm` package orchestrates distributed LLM evaluations through the followi
 
 ### 1. **Cluster Auto-Detection**
 - Automatically detects the current HPC cluster based on hostname patterns
-- Loads cluster-specific configurations from `clusters.json` including:
+- Loads cluster-specific configurations from `clusters.yaml` including:
   - SLURM partition and account settings
   - Shared storage paths for models, datasets, and results
   - GPU allocation and queue limits

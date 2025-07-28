@@ -12,6 +12,7 @@ dependencies = [
     "torch",
     "lm-eval",
     "huggingface_hub",
+    "pyyaml",
 ]
 
 [project.scripts]
@@ -24,7 +25,7 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "oellm"
 module-root = ""
-include = ["oellm/clusters.json"]
+include = ["oellm/clusters.yaml"]
 
 [tool.uv.sources]
 torch = [
