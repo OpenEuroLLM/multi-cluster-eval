@@ -292,10 +292,10 @@ def schedule_evals(
     eval_csv_path: str | None = None,
     *,
     max_array_len: int = 32,
-    verbose: Annotated[bool, {"action": ActionYesNo}] = False,
+    verbose: ActionYesNo = ActionYesNo(yes_prefix="true", no_prefix="false"),
     download_only: bool = False,
-    dry_run: Annotated[bool, {"action": ActionYesNo}] = False,
-    skip_checks: Annotated[bool, {"action": ActionYesNo}] = False,
+    dry_run: ActionYesNo = ActionYesNo(yes_prefix="true", no_prefix="false"),
+    skip_checks: ActionYesNo = ActionYesNo(yes_prefix="true", no_prefix="false"),
 ) -> None:
     """
     Schedule evaluation jobs for a given set of models, tasks, and number of shots.
