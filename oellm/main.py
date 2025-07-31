@@ -230,56 +230,113 @@ def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
 def _pre_download_task_datasets(tasks: Iterable[str]) -> None:
     """Ensure that all datasets required by the given `tasks` are present in the local 🤗 cache at $HF_HOME."""
 
+    # Mapping of common task names to their HuggingFace dataset identifiers
+    # This covers the most commonly used evaluation tasks
+    TASK_TO_DATASET_MAP = {
+        # Core language understanding tasks
+        "hellaswag": "Rowan/hellaswag",
+        "arc_easy": "allenai/ai2_arc",  # subset: ARC-Easy
+        "arc_challenge": "allenai/ai2_arc",  # subset: ARC-Challenge
+        "winogrande": "allenai/winogrande",
+        "piqa": "ybisk/piqa",
+        "boolq": "google/boolq",
+        "openbookqa": "allenai/openbookqa",
+        
+        # Mathematical reasoning
+        "gsm8k": "openai/gsm8k",
+        "math": "hendrycks/competition_math",
+        
+        # Knowledge and reasoning
+        "mmlu": "cais/mmlu", 
+        "truthfulqa": "truthful_qa",
+        "lambada_openai": "EleutherAI/lambada_openai",
+        
+        # Common sense reasoning  
+        "commonsense_qa": "tau/commonsense_qa",
+        "social_i_qa": "allenai/social_i_qa",
+        
+        # Reading comprehension
+        "race": "ehovy/race",
+        "squad": "rajpurkar/squad",
+        "squad_v2": "rajpurkar/squad_v2",
+        
+        # Code tasks
+        "humaneval": "openai/openai_humaneval",
+        "mbpp": "google-research-datasets/mbpp",
+        
+        # Multilingual
+        "xnli": "facebook/xnli",
+        "xcopa": "cambridgeltl/xcopa",
+        
+        # Additional tasks that might have different naming
+        "sciq": "allenai/sciq",
+        "drop": "ucinlp/drop",
+        "copa": "pkavumba/balanced-copa",
+        "rte": "nyu-mll/glue",  # subset: RTE
+        "wsc": "nyu-mll/glue",  # subset: WSC
+        "cb": "nyu-mll/super_glue",  # subset: CB
+        "wic": "nyu-mll/super_glue",  # subset: WiC
+    }
+
     try:
-        from datasets import DownloadMode  # type: ignore
-        from lm_eval.tasks import TaskManager  # type: ignore
-    except Exception as import_err:
+        from datasets import load_dataset, DownloadMode  # type: ignore
+    except ImportError as import_err:
         logging.warning(
-            "Could not import TaskManager from lm_eval.tasks – skipping dataset pre-download.\n%s",
+            "Could not import datasets library – skipping dataset pre-download.\n%s",
             import_err,
         )
         return
 
     processed: set[str] = set()
 
-    tm = TaskManager()
-
     for task_name in tasks:
         if not isinstance(task_name, str) or task_name in processed:
             continue
         processed.add(task_name)
 
+        # Handle task groups (tasks with wildcards or variations)
+        base_task = task_name.split("_")[0] if "_" in task_name else task_name
+        
+        # Try exact match first, then base task
+        dataset_name = TASK_TO_DATASET_MAP.get(task_name) or TASK_TO_DATASET_MAP.get(base_task)
+        
+        if not dataset_name:
+            logging.info(f"No known dataset mapping for task '{task_name}' - skipping pre-download")
+            continue
+
         try:
-            logging.info(
-                f"Preparing dataset for task '{task_name}' (download if not cached)…"
-            )
+            logging.info(f"Pre-downloading dataset '{dataset_name}' for task '{task_name}'...")
 
-            # Instantiating the task downloads the dataset (or reuses cache)
-            task_objects = tm.load_task_or_group(task_name)
+            # Special handling for tasks that need specific subsets
+            if task_name in ["arc_easy", "arc_challenge"]:
+                subset = "ARC-Easy" if "easy" in task_name else "ARC-Challenge"
+                load_dataset(dataset_name, subset, download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS)
+            elif task_name in ["rte", "wsc"] and dataset_name == "nyu-mll/glue":
+                subset = task_name.upper()
+                load_dataset(dataset_name, subset, download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS)
+            elif task_name in ["cb", "wic"] and dataset_name == "nyu-mll/super_glue":
+                subset = task_name.upper() if task_name == "cb" else "WiC"
+                load_dataset(dataset_name, subset, download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS)
+            elif task_name == "mmlu":
+                # MMLU requires 'all' config to get the full dataset
+                load_dataset(dataset_name, "all", download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS)
+            elif task_name == "gsm8k":
+                # GSM8K uses 'main' config
+                load_dataset(dataset_name, "main", download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS)
+            elif task_name == "winogrande":
+                # WinoGrande typically uses the debiased version
+                load_dataset(dataset_name, "winogrande_debiased", download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS)
+            else:
+                # For most datasets, load without subset
+                load_dataset(dataset_name, download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS)
 
-            # Some entries might be nested dictionaries (e.g., groups)
-            stack = [task_objects]
-            while stack:
-                current = stack.pop()
-                if isinstance(current, dict):
-                    stack.extend(current.values())
-                    continue
-                if hasattr(current, "download") and callable(current.download):
-                    try:
-                        current.download(
-                            download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS
-                        )  # type: ignore[arg-type]
-                    except TypeError as e:
-                        logging.error(
-                            f"Failed to download dataset for task '{task_name}' with download_mode=REUSE_DATASET_IF_EXISTS: {e}"
-                        )
-                        current.download()  # type: ignore[misc]
-
-            logging.debug(f"Finished dataset preparation for task '{task_name}'.")
+            logging.debug(f"Successfully pre-downloaded dataset for task '{task_name}'")
+            
         except Exception as e:
             logging.warning(
-                "Failed to pre-download dataset for task '%s'. The evaluation job might fail on the compute node.\n%s",
+                "Failed to pre-download dataset for task '%s' (dataset: %s). The evaluation job might fail on the compute node.\n%s",
                 task_name,
+                dataset_name,
                 e,
             )
 

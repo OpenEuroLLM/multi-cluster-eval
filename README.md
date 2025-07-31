@@ -59,6 +59,20 @@ uv tool install git+https://github.com/OpenEuroLLM/multi-cluster-eval.git
 
 This makes the `oellm` command available globally in your shell.
 
+### Dataset Pre-downloading
+
+`oellm` automatically pre-downloads evaluation datasets to ensure they're available offline on compute nodes. This feature:
+
+- Uses the HuggingFace `datasets` library (already included as a dependency)
+- Works without requiring `torch` or `lm-eval-harness` 
+- Supports all major evaluation tasks (HellaSwag, MMLU, GSM8K, ARC, etc.)
+- Gracefully handles unknown tasks by skipping them with a warning
+- Uses cached datasets when available to avoid re-downloading
+
+The pre-download happens automatically before job submission and covers the most commonly used evaluation benchmarks.
+
+### Updating the Package
+
 If you've already installed the package, you can run the following command to update it:
 ```bash
 uv tool upgrade oellm
