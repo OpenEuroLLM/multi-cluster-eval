@@ -1,0 +1,25 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/pytorch:25.06-py3
+
+%labels
+    Author      multi-cluster-eval
+    Description Apptainer image for Leonardo cluster (converted from dockerfile)
+
+%post
+    # 1. Install uv package manager
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    echo 'export PATH=$HOME/.local/bin:$PATH' >> /etc/profile
+
+    # Make uv visible for subsequent commands during build
+    export PATH=/root/.local/bin:$PATH
+
+    # 2. Install Python dependencies
+    uv pip install --system --break-system-packages lm-eval \
+        transformers "datasets<4.0.0" wandb sentencepiece tiktoken accelerate
+
+%environment
+    # Ensure uv is present inside the container runtime as well
+    export PATH=/root/.local/bin:$PATH
+
+%runscript
+    exec bash "$@" 

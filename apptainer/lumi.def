@@ -1,0 +1,25 @@
+Bootstrap: docker
+From: rocm/pytorch:rocm6.4.1_ubuntu24.04_py3.12_pytorch_release_2.7.1
+
+%labels
+    Author      multi-cluster-eval
+    Description Apptainer image for LUMI cluster (converted from dockerfile)
+
+%post
+    # 1. Install uv package manager
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    echo 'export PATH=$HOME/.local/bin:$PATH' >> /etc/profile
+
+    # Make uv visible for subsequent commands during build
+    export PATH=/root/.local/bin:$PATH
+
+    # 2. Install Python dependencies
+    uv pip install --system --break-system-packages lm-eval \
+        transformers "datasets<4.0.0" wandb sentencepiece tiktoken accelerate
+
+%environment
+    # Ensure uv is present inside the container runtime as well
+    export PATH=/root/.local/bin:$PATH
+
+%runscript
+    exec bash "$@" 

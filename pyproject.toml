@@ -1,0 +1,41 @@
+[project]
+name = "oellm"
+version = "0.1.0"
+description = "OpenEuroLLM evaluation package"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pandas",
+    "jsonargparse",
+    "datasets<4.0.0",
+    "rich",
+    "torch",
+    "lm-eval",
+    "huggingface_hub",
+    "pyyaml",
+]
+
+[project.scripts]
+oellm = "oellm.main:main"
+
+[build-system]
+requires = ["uv_build>=0.7.19,<0.8.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "oellm"
+module-root = ""
+include = ["oellm/clusters.yaml"]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu" },
+]
+torchvision = [
+    { index = "pytorch-cpu" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
