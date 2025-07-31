@@ -144,5 +144,5 @@ oellm schedule-eval --eval_csv_path custom_evals.csv
 Run in download-only mode to prepare resources without submitting jobs:
 
 ```bash
-oellm schedule-eval --models "EleutherAI/pythia-160m" --tasks "hellaswag" --n_shot 0 --download_only
+oellm schedule-eval --models "EleutherAI/pythia-160m" --tasks "hellaswag" --n_shot 0 --download_only True
 ```

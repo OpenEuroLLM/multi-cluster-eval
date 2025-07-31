@@ -13,8 +13,7 @@ from typing import Iterable
 
 import pandas as pd
 from huggingface_hub import hf_hub_download, snapshot_download
-from jsonargparse import auto_cli, ActionYesNo
-from typing import Annotated
+from jsonargparse import auto_cli
 from rich.console import Console
 from rich.logging import RichHandler
 
@@ -292,10 +291,10 @@ def schedule_evals(
     eval_csv_path: str | None = None,
     *,
     max_array_len: int = 32,
-    verbose: ActionYesNo = ActionYesNo(yes_prefix="true", no_prefix="false"),
+    verbose: bool = False,
     download_only: bool = False,
-    dry_run: ActionYesNo = ActionYesNo(yes_prefix="true", no_prefix="false"),
-    skip_checks: ActionYesNo = ActionYesNo(yes_prefix="true", no_prefix="false"),
+    dry_run: bool = False,
+    skip_checks: bool = False,
 ) -> None:
     """
     Schedule evaluation jobs for a given set of models, tasks, and number of shots.
