@@ -13,7 +13,8 @@ from typing import Iterable
 
 import pandas as pd
 from huggingface_hub import hf_hub_download, snapshot_download
-from jsonargparse import auto_cli
+from jsonargparse import auto_cli, ActionYesNo
+from typing import Annotated
 from rich.console import Console
 from rich.logging import RichHandler
 
@@ -21,12 +22,29 @@ from rich.logging import RichHandler
 def ensure_singularity_image(image_name: str) -> None:
     # TODO: switch to OELLM dataset repo once it is created
     hf_repo = os.environ.get("HF_SIF_REPO", "timurcarstensen/testing")
-    hf_hub_download(
-        repo_id=hf_repo,
-        filename=image_name,
-        repo_type="dataset",
-        local_dir=os.getenv("EVAL_BASE_DIR"),
-    )
+    image_path = Path(os.getenv("EVAL_BASE_DIR")) / image_name
+    
+    try:
+        hf_hub_download(
+            repo_id=hf_repo,
+            filename=image_name,
+            repo_type="dataset",
+            local_dir=os.getenv("EVAL_BASE_DIR"),
+        )
+        logging.info("Successfully downloaded latest Singularity image from HuggingFace")
+    except Exception as e:
+        logging.warning(
+            "Failed to fetch latest container image from HuggingFace: %s", str(e)
+        )
+        if image_path.exists():
+            logging.info(
+                "Using existing Singularity image at %s", image_path
+            )
+        else:
+            raise RuntimeError(
+                f"No container image found at {image_path} and failed to download from HuggingFace. "
+                f"Cannot proceed with evaluation scheduling."
+            ) from e
 
     logging.info(
         "Singularity image ready at %s",
@@ -34,7 +52,7 @@ def ensure_singularity_image(image_name: str) -> None:
     )
 
 
-def _setup_logging(debug: bool = False):
+def _setup_logging(verbose: bool = False):
     rich_handler = RichHandler(
         console=Console(),
         show_time=True,
@@ -55,7 +73,7 @@ def _setup_logging(debug: bool = False):
     root_logger = logging.getLogger()
     root_logger.handlers = []  # Remove any default handlers
     root_logger.addHandler(rich_handler)
-    root_logger.setLevel(logging.DEBUG if debug else logging.INFO)
+    root_logger.setLevel(logging.DEBUG if verbose else logging.INFO)
 
 
 def _load_cluster_env() -> None:
@@ -274,8 +292,10 @@ def schedule_evals(
     eval_csv_path: str | None = None,
     *,
     max_array_len: int = 32,
-    debug: bool = False,
+    verbose: Annotated[bool, {"action": ActionYesNo}] = False,
     download_only: bool = False,
+    dry_run: Annotated[bool, {"action": ActionYesNo}] = False,
+    skip_checks: Annotated[bool, {"action": ActionYesNo}] = False,
 ) -> None:
     """
     Schedule evaluation jobs for a given set of models, tasks, and number of shots.
@@ -294,25 +314,24 @@ def schedule_evals(
         max_array_len: The maximum number of jobs to schedule to run concurrently.
             Warning: this is not the number of jobs in the array job. This is determined by the environment variable `QUEUE_LIMIT`.
         download_only: If True, only download the datasets and models and exit.
+        dry_run: If True, generate the SLURM script but don't submit it to the scheduler.
+        skip_checks: If True, skip container image, model validation, and dataset pre-download checks for faster execution.
     """
-    _setup_logging(debug)
+    _setup_logging(verbose)
 
     # Load cluster-specific environment variables (paths, etc.)
     _load_cluster_env()
 
-    # ------------------------------------------------------------------
-    # Ensure that the shared Singularity image derived from the Docker
-    # reference is present (or freshly rebuilt if missing). All users on
-    # a cluster share the same image under EVAL_SIF_PATH (configured in
-    # clusters.yaml). This avoids the brittle shared-venv approach.
-    # ------------------------------------------------------------------
-    image_name = os.environ.get("EVAL_CONTAINER_IMAGE")
-    if image_name is None:
-        raise ValueError(
-            "EVAL_CONTAINER_IMAGE is not set. Please set it in clusters.yaml."
-        )
+    if not skip_checks:
+        image_name = os.environ.get("EVAL_CONTAINER_IMAGE")
+        if image_name is None:
+            raise ValueError(
+                "EVAL_CONTAINER_IMAGE is not set. Please set it in clusters.yaml."
+            )
 
-    ensure_singularity_image(image_name)
+        ensure_singularity_image(image_name)
+    else:
+        logging.info("Skipping container image check (--skip-checks enabled)")
 
     if eval_csv_path:
         if models or tasks or n_shot:
@@ -326,23 +345,31 @@ def schedule_evals(
                 f"CSV file must contain the columns: {', '.join(required_cols)}"
             )
 
-        unique_models = df["model_path"].unique()
-        model_path_map = _process_model_paths(unique_models)
+        if not skip_checks:
+            unique_models = df["model_path"].unique()
+            model_path_map = _process_model_paths(unique_models)
 
-        # Create a new DataFrame with the expanded model paths
-        expanded_rows = []
-        for _, row in df.iterrows():
-            original_model_path = row["model_path"]
-            if original_model_path in model_path_map:
-                for expanded_path in model_path_map[original_model_path]:
-                    new_row = row.copy()
-                    new_row["model_path"] = expanded_path
-                    expanded_rows.append(new_row)
-        df = pd.DataFrame(expanded_rows)
+            # Create a new DataFrame with the expanded model paths
+            expanded_rows = []
+            for _, row in df.iterrows():
+                original_model_path = row["model_path"]
+                if original_model_path in model_path_map:
+                    for expanded_path in model_path_map[original_model_path]:
+                        new_row = row.copy()
+                        new_row["model_path"] = expanded_path
+                        expanded_rows.append(new_row)
+            df = pd.DataFrame(expanded_rows)
+        else:
+            logging.info("Skipping model path processing and validation (--skip-checks enabled)")
 
     elif models and tasks and n_shot is not None:
-        model_path_map = _process_model_paths(models.split(","))
-        model_paths = [p for paths in model_path_map.values() for p in paths]
+        if not skip_checks:
+            model_path_map = _process_model_paths(models.split(","))
+            model_paths = [p for paths in model_path_map.values() for p in paths]
+        else:
+            logging.info("Skipping model path processing and validation (--skip-checks enabled)")
+            model_paths = models.split(",")
+        
         tasks_list = tasks.split(",")
 
         # cross product of model_paths and tasks into a dataframe
@@ -365,7 +392,10 @@ def schedule_evals(
 
     # Ensure that all datasets required by the tasks are cached locally to avoid
     # network access on compute nodes.
-    _pre_download_task_datasets(df["task_path"].unique())
+    if not skip_checks:
+        _pre_download_task_datasets(df["task_path"].unique())
+    else:
+        logging.info("Skipping dataset pre-download (--skip-checks enabled)")
 
     if download_only:
         return None
@@ -421,6 +451,12 @@ def schedule_evals(
 
     logging.debug(f"Saved sbatch script to {sbatch_script_path}")
 
+    if dry_run:
+        logging.info(f"Dry run mode: SLURM script generated at {sbatch_script_path}")
+        logging.info(f"Would schedule {len(df)} evaluation jobs")
+        logging.info("To submit the job, run: sbatch " + str(sbatch_script_path))
+        return
+
     # Submit the job script to slurm by piping the script content to sbatch
     try:
         result = subprocess.run(
@@ -433,6 +469,22 @@ def schedule_evals(
         )
         logging.info("Job submitted successfully.")
         logging.info(result.stdout)
+        
+        # Provide helpful information about job monitoring and file locations
+        logging.info(f"📁 Evaluation directory: {evals_dir}")
+        logging.info(f"📄 SLURM script: {sbatch_script_path}")
+        logging.info(f"📋 Job configuration: {csv_path}")
+        logging.info(f"📜 SLURM logs will be stored in: {slurm_logs_dir}")
+        logging.info(f"📊 Results will be stored in: {evals_dir / 'results'}")
+        
+        # Extract job ID from sbatch output for monitoring commands
+        import re
+        job_id_match = re.search(r'Submitted batch job (\d+)', result.stdout)
+        if job_id_match:
+            job_id = job_id_match.group(1)
+            logging.info(f"🔍 Monitor job status: squeue -j {job_id}")
+            logging.info(f"📈 View job details: scontrol show job {job_id}")
+            logging.info(f"❌ Cancel job if needed: scancel {job_id}")
     except subprocess.CalledProcessError as e:
         logging.error(f"Failed to submit job: {e}")
         logging.error(f"sbatch stderr: {e.stderr}")
