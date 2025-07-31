@@ -446,6 +446,8 @@ def schedule_evals(
 
     # Save the sbatch script to the evals directory
     sbatch_script_path = evals_dir / "submit_evals.sbatch"
+    logging.debug(f"Saving sbatch script to {sbatch_script_path}")
+
     with open(sbatch_script_path, "w") as f:
         f.write(sbatch_script)
 
