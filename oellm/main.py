@@ -123,7 +123,8 @@ def _load_cluster_env() -> None:
             )
 
 
-def _parse_user_queue_load() -> int:
+def _num_jobs_in_queue() -> int:
+    # TODO avoid running in shell mode which is not secure
     result = subprocess.run(
         "squeue -u $USER -h -t pending,running -r | wc -l",
         shell=True,
@@ -368,7 +369,7 @@ def schedule_evals(
         else:
             logging.info("Skipping model path processing and validation (--skip-checks enabled)")
             model_paths = models.split(",")
-        
+
         tasks_list = tasks.split(",")
 
         # cross product of model_paths and tasks into a dataframe
@@ -400,7 +401,7 @@ def schedule_evals(
         return None
 
     queue_limit = int(os.environ.get("QUEUE_LIMIT", 250))
-    remaining_queue_capacity = queue_limit - _parse_user_queue_load()
+    remaining_queue_capacity = queue_limit - _num_jobs_in_queue()
 
     if remaining_queue_capacity <= 0:
         logging.warning("No remaining queue capacity. Not scheduling any jobs.")
@@ -445,10 +446,10 @@ def schedule_evals(
 
     # Save the sbatch script to the evals directory
     sbatch_script_path = evals_dir / "submit_evals.sbatch"
+    logging.debug(f"Saving sbatch script to {sbatch_script_path}")
+
     with open(sbatch_script_path, "w") as f:
         f.write(sbatch_script)
-
-    logging.debug(f"Saved sbatch script to {sbatch_script_path}")
 
     if dry_run:
         logging.info(f"Dry run mode: SLURM script generated at {sbatch_script_path}")
@@ -458,6 +459,15 @@ def schedule_evals(
 
     # Submit the job script to slurm by piping the script content to sbatch
     try:
+        logging.info(f"Calling sbatch to launch the evaluations")
+
+        # Provide helpful information about job monitoring and file locations
+        logging.info(f"📁 Evaluation directory: {evals_dir}")
+        logging.info(f"📄 SLURM script: {sbatch_script_path}")
+        logging.info(f"📋 Job configuration: {csv_path}")
+        logging.info(f"📜 SLURM logs will be stored in: {slurm_logs_dir}")
+        logging.info(f"📊 Results will be stored in: {evals_dir / 'results'}")
+
         result = subprocess.run(
             ["sbatch"],
             input=sbatch_script,
@@ -468,16 +478,8 @@ def schedule_evals(
         )
         logging.info("Job submitted successfully.")
         logging.info(result.stdout)
-        
-        # Provide helpful information about job monitoring and file locations
-        logging.info(f"📁 Evaluation directory: {evals_dir}")
-        logging.info(f"📄 SLURM script: {sbatch_script_path}")
-        logging.info(f"📋 Job configuration: {csv_path}")
-        logging.info(f"📜 SLURM logs will be stored in: {slurm_logs_dir}")
-        logging.info(f"📊 Results will be stored in: {evals_dir / 'results'}")
-        
+
         # Extract job ID from sbatch output for monitoring commands
-        import re
         job_id_match = re.search(r'Submitted batch job (\d+)', result.stdout)
         if job_id_match:
             job_id = job_id_match.group(1)

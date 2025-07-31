@@ -1,18 +1,18 @@
 shared:
-  TIME_LIMIT: "00:30:00"
+  TIME_LIMIT: "00:30:00"  # time limit in the format HH:MM:SS
   UV_LINK_MODE: "copy"
   PYTHON_PATH: "{EVAL_BASE_DIR}/.venv"
-  HF_HOME: "{EVAL_BASE_DIR}/hf_data"
-  EVAL_OUTPUT_DIR: "{EVAL_BASE_DIR}/{USER}"
+  HF_HOME: "{EVAL_BASE_DIR}/hf_data"  # where HuggingFace models and datasets are stored
+  EVAL_OUTPUT_DIR: "{EVAL_BASE_DIR}/{USER}"  # where evaluations are written
+  GPUS_PER_NODE: 4
 
 leonardo:
-  hostname_pattern: "*.leonardo.local"
+  hostname_pattern: "*.leonardo.local"  # use this regexp to automatically assign environment variables corresponding to this YAML
   EVAL_BASE_DIR: "/leonardo_work/AIFAC_L01_028/shared_evals"
-  PARTITION: "boost_usr_prod"
-  ACCOUNT: "AIFAC_L01_028"
-  QUEUE_LIMIT: 1000
-  GPUS_PER_NODE: 4
-  EVAL_CONTAINER_IMAGE: "eval_env-leonardo.sif"
+  PARTITION: "boost_usr_prod"  # default partition to use
+  ACCOUNT: "AIFAC_L01_028"  # default account to use
+  QUEUE_LIMIT: 1000  # maximum number of jobs that can be submitted as job/array, used to send only jobs that respects QOS
+  EVAL_CONTAINER_IMAGE: "eval_env-leonardo.sif"  # name of the container image that is pulled which is built automatically with Github actions
   SINGULARITY_ARGS: "--nv"
 
 jureca:
@@ -21,7 +21,6 @@ jureca:
   PARTITION: "dc-gpu"
   ACCOUNT: "synthlaion"
   QUEUE_LIMIT: 512
-  GPUS_PER_NODE: 4
   EVAL_CONTAINER_IMAGE: "eval_env-jureca.sif"
   SINGULARITY_ARGS: "--nv"
 
@@ -31,6 +30,5 @@ lumi:
   PARTITION: "small-g"
   ACCOUNT: "project_462000963"
   QUEUE_LIMIT: 210
-  GPUS_PER_NODE: 4
   EVAL_CONTAINER_IMAGE: "eval_env-lumi.sif"
   SINGULARITY_ARGS: "--rocm"
