@@ -1,5 +1,4 @@
 # Standard library imports
-import yaml
 import logging
 import os
 import re
@@ -11,8 +10,10 @@ from pathlib import Path
 from string import Template
 from typing import Iterable
 
+import numpy as np
 import pandas as pd
-from huggingface_hub import hf_hub_download, snapshot_download
+import yaml
+# Heavy imports moved to where they're needed
 from jsonargparse import auto_cli
 from rich.console import Console
 from rich.logging import RichHandler
@@ -20,9 +21,11 @@ from rich.logging import RichHandler
 
 def ensure_singularity_image(image_name: str) -> None:
     # TODO: switch to OELLM dataset repo once it is created
+    from huggingface_hub import hf_hub_download
+    
     hf_repo = os.environ.get("HF_SIF_REPO", "timurcarstensen/testing")
     image_path = Path(os.getenv("EVAL_BASE_DIR")) / image_name
-    
+
     try:
         hf_hub_download(
             repo_id=hf_repo,
@@ -30,15 +33,15 @@ def ensure_singularity_image(image_name: str) -> None:
             repo_type="dataset",
             local_dir=os.getenv("EVAL_BASE_DIR"),
         )
-        logging.info("Successfully downloaded latest Singularity image from HuggingFace")
+        logging.info(
+            "Successfully downloaded latest Singularity image from HuggingFace"
+        )
     except Exception as e:
         logging.warning(
             "Failed to fetch latest container image from HuggingFace: %s", str(e)
         )
         if image_path.exists():
-            logging.info(
-                "Using existing Singularity image at %s", image_path
-            )
+            logging.info("Using existing Singularity image at %s", image_path)
         else:
             raise RuntimeError(
                 f"No container image found at {image_path} and failed to download from HuggingFace. "
@@ -144,6 +147,32 @@ def _parse_user_queue_load() -> int:
     return 0
 
 
+def _expand_local_model_paths(model: str) -> list[Path]:
+    """
+    Expands a local model path to include all checkpoints if it's a directory.
+    Returns empty list if not a local path.
+    """
+    model_paths = []
+    if Path(model).exists() and Path(model).is_dir():
+        # could either be the direct path to a local model checkpoint dir or a directory that contains a lot of
+        # intermediate checkpoints from training of the structure: `model_name/hf/iter_1`, `model_name/hf/iter_2` ...
+        # or `model_name/iter_1`, `model_name/iter_2` ...
+        # The base case is that `model_name` is a directory that contains the model in a HF checkpoint format
+
+        # Basecase: check if the directory contains a `.safetensors` file
+        if any(Path(model).glob("*.safetensors")):
+            model_paths.append(Path(model))
+
+        # check if dir contains subdirs that themselves contain a `.safetensors` file
+        model_path_base = (
+            Path(model) / "hf" if "hf" not in Path(model).name else Path(model)
+        )
+        for subdir in model_path_base.glob("*"):
+            if subdir.is_dir() and any(subdir.glob("*.safetensors")):
+                model_paths.append(subdir)
+    return model_paths
+
+
 def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
     """
     Processes model strings into a dict of model paths.
@@ -151,27 +180,15 @@ def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
     Each model string can be a local path or a huggingface model identifier.
     This function expands directory paths that contain multiple checkpoints.
     """
+    from huggingface_hub import snapshot_download
+    
     processed_model_paths = {}
     model_paths = []
     for model in models:
-        if Path(model).exists() and Path(model).is_dir():
-            # could either be the direct path to a local model checkpoint dir or a directory that contains a lot of
-            # intermediate checkpoints from training of the structure: `model_name/hf/iter_1`, `model_name/hf/iter_2` ...
-            # or `model_name/iter_1`, `model_name/iter_2` ...
-            # The base case is that `model_name` is a directory that contains the model in a HF checkpoint format
-
-            # Basecase: check if the directory contains a `.safetensors` file
-            if any(Path(model).glob("*.safetensors")):
-                model_paths.append(Path(model))
-
-            # check if dir contains subdirs that themselves contain a `.safetensors` file
-            model_path_base = (
-                Path(model) / "hf" if "hf" not in Path(model).name else Path(model)
-            )
-            for subdir in model_path_base.glob("*"):
-                if subdir.is_dir() and any(subdir.glob("*.safetensors")):
-                    model_paths.append(subdir)
-
+        # First try to expand local paths
+        local_paths = _expand_local_model_paths(model)
+        if local_paths:
+            model_paths.extend(local_paths)
         else:
             logging.info(
                 f"Model {model} not found locally, assuming it is a 🤗 hub model"
@@ -344,31 +361,66 @@ def schedule_evals(
                 f"CSV file must contain the columns: {', '.join(required_cols)}"
             )
 
+        # Always expand local model paths, even with skip_checks
+        unique_models = df["model_path"].unique()
+        expanded_rows = []
+        for _, row in df.iterrows():
+            original_model_path = row["model_path"]
+            local_paths = _expand_local_model_paths(original_model_path)
+            if local_paths:
+                # Use expanded local paths
+                for expanded_path in local_paths:
+                    new_row = row.copy()
+                    new_row["model_path"] = expanded_path
+                    expanded_rows.append(new_row)
+            else:
+                # Keep original path (might be HF model)
+                expanded_rows.append(row)
+        df = pd.DataFrame(expanded_rows)
+        
+        # Download HF models only if skip_checks is False
         if not skip_checks:
-            unique_models = df["model_path"].unique()
-            model_path_map = _process_model_paths(unique_models)
-
-            # Create a new DataFrame with the expanded model paths
-            expanded_rows = []
-            for _, row in df.iterrows():
-                original_model_path = row["model_path"]
-                if original_model_path in model_path_map:
-                    for expanded_path in model_path_map[original_model_path]:
-                        new_row = row.copy()
-                        new_row["model_path"] = expanded_path
-                        expanded_rows.append(new_row)
-            df = pd.DataFrame(expanded_rows)
+            # Process any HF models that need downloading
+            hf_models = [m for m in df["model_path"].unique() if not Path(m).exists()]
+            if hf_models:
+                model_path_map = _process_model_paths(hf_models)
+                # Update the dataframe with processed HF models
+                for idx, row in df.iterrows():
+                    if row["model_path"] in model_path_map:
+                        # This shouldn't expand further, just update the path
+                        df.at[idx, "model_path"] = model_path_map[row["model_path"]][0]
         else:
-            logging.info("Skipping model path processing and validation (--skip-checks enabled)")
+            logging.info(
+                "Skipping HuggingFace model downloads (--skip-checks enabled)"
+            )
 
     elif models and tasks and n_shot is not None:
-        if not skip_checks:
-            model_path_map = _process_model_paths(models.split(","))
-            model_paths = [p for paths in model_path_map.values() for p in paths]
-        else:
-            logging.info("Skipping model path processing and validation (--skip-checks enabled)")
-            model_paths = models.split(",")
+        model_list = models.split(",")
+        model_paths = []
         
+        # Always expand local paths
+        for model in model_list:
+            local_paths = _expand_local_model_paths(model)
+            if local_paths:
+                model_paths.extend(local_paths)
+            else:
+                model_paths.append(model)
+        
+        # Download HF models only if skip_checks is False
+        if not skip_checks:
+            hf_models = [m for m in model_paths if not Path(m).exists()]
+            if hf_models:
+                model_path_map = _process_model_paths(hf_models)
+                # Replace HF model identifiers with processed paths
+                model_paths = [
+                    model_path_map[m][0] if m in model_path_map else m
+                    for m in model_paths
+                ]
+        else:
+            logging.info(
+                "Skipping HuggingFace model downloads (--skip-checks enabled)"
+            )
+
         tasks_list = tasks.split(",")
 
         # cross product of model_paths and tasks into a dataframe
@@ -428,15 +480,63 @@ def schedule_evals(
     with open(Path(__file__).parent / "template.sbatch", "r") as f:
         sbatch_template = f.read()
 
+    # Calculate dynamic array size and time limits
+    total_evals = len(df)
+    minutes_per_eval = 10  # Budget 10 minutes per eval
+    total_minutes = total_evals * minutes_per_eval
+    
+    # Maximum runtime per job (18 hours with safety margin)
+    max_minutes_per_job = 18 * 60  # 18 hours
+    
+    # Calculate minimum array size needed to stay under 18 hours per job
+    min_array_size_for_time = max(1, int(np.ceil(total_minutes / max_minutes_per_job)))
+    
+    # Start with 32 jobs if we have enough evals, otherwise use the number of evals
+    desired_array_size = min(32, total_evals) if total_evals >= 32 else total_evals
+    
+    # If 32 jobs would exceed time limit, increase array size
+    if desired_array_size < min_array_size_for_time:
+        desired_array_size = min_array_size_for_time
+    
+    # The actual array size is limited by queue capacity and total evals
+    actual_array_size = min(remaining_queue_capacity, desired_array_size, total_evals)
+    
+    # Calculate actual time per job
+    evals_per_job = max(1, int(np.ceil(total_evals / actual_array_size)))
+    minutes_per_job = evals_per_job * minutes_per_eval
+    
+    # Add 20% safety margin and round up to nearest hour
+    minutes_with_margin = int(minutes_per_job * 1.2)
+    hours_with_margin = max(1, int(np.ceil(minutes_with_margin / 60)))
+    
+    # Cap at 24 hours
+    hours_with_margin = min(hours_with_margin, 24)
+    
+    # Format time limit for SLURM (HH:MM:SS)
+    time_limit = f"{hours_with_margin:02d}:00:00"
+    
+    # Log the calculated values
+    logging.info(f"📊 Evaluation planning:")
+    logging.info(f"   Total evaluations: {total_evals}")
+    logging.info(f"   Estimated time per eval: {minutes_per_eval} minutes")
+    logging.info(f"   Total estimated time: {total_minutes} minutes ({total_minutes/60:.1f} hours)")
+    logging.info(f"   Desired array size: {desired_array_size}")
+    logging.info(f"   Actual array size: {actual_array_size} (limited by queue capacity: {remaining_queue_capacity})")
+    logging.info(f"   Evaluations per job: {evals_per_job}")
+    logging.info(f"   Time per job: {minutes_per_job} minutes ({minutes_per_job/60:.1f} hours)")
+    logging.info(f"   Time limit with safety margin: {time_limit}")
+
     # replace the placeholders in the template with the actual values
     # First, replace python-style placeholders
     sbatch_script = sbatch_template.format(
         csv_path=csv_path,
         max_array_len=max_array_len,
-        array_limit=len(df) - 1,
-        num_jobs=len(df),
+        array_limit=actual_array_size - 1,  # Array is 0-indexed
+        num_jobs=actual_array_size,  # This is the number of array jobs, not total evals
+        total_evals=len(df),  # Pass the total number of evaluations
         log_dir=evals_dir / "slurm_logs",
         evals_dir=str(evals_dir / "results"),
+        time_limit=time_limit,  # Dynamic time limit
     )
 
     # substitute any $ENV_VAR occurrences (e.g., $TIME_LIMIT) since env vars are not
@@ -452,7 +552,12 @@ def schedule_evals(
 
     if dry_run:
         logging.info(f"Dry run mode: SLURM script generated at {sbatch_script_path}")
-        logging.info(f"Would schedule {len(df)} evaluation jobs")
+        logging.info(
+            f"Would schedule {actual_array_size} array jobs to handle {len(df)} evaluations"
+        )
+        logging.info(
+            f"Each array job will handle ~{(len(df) + actual_array_size - 1) // actual_array_size} evaluations"
+        )
         logging.info("To submit the job, run: sbatch " + str(sbatch_script_path))
         return
 
@@ -468,17 +573,25 @@ def schedule_evals(
         )
         logging.info("Job submitted successfully.")
         logging.info(result.stdout)
-        
+
         # Provide helpful information about job monitoring and file locations
         logging.info(f"📁 Evaluation directory: {evals_dir}")
         logging.info(f"📄 SLURM script: {sbatch_script_path}")
         logging.info(f"📋 Job configuration: {csv_path}")
         logging.info(f"📜 SLURM logs will be stored in: {slurm_logs_dir}")
         logging.info(f"📊 Results will be stored in: {evals_dir / 'results'}")
-        
+        logging.info(
+            f"🔢 Array job size: {actual_array_size} jobs handling {len(df)} total evaluations"
+        )
+        logging.info(
+            f"📈 Each array job handles ~{(len(df) + actual_array_size - 1) // actual_array_size} evaluations"
+        )
+        logging.info(f"⏱️  Time limit per job: {time_limit}")
+
         # Extract job ID from sbatch output for monitoring commands
         import re
-        job_id_match = re.search(r'Submitted batch job (\d+)', result.stdout)
+
+        job_id_match = re.search(r"Submitted batch job (\d+)", result.stdout)
         if job_id_match:
             job_id = job_id_match.group(1)
             logging.info(f"🔍 Monitor job status: squeue -j {job_id}")
@@ -493,5 +606,33 @@ def schedule_evals(
         )
 
 
+def build_csv(
+    output_path: str = "eval_config.csv",
+    *,
+    verbose: bool = False,
+) -> None:
+    """
+    Build a CSV file for evaluation with per-task n_shot configurations using the interactive builder.
+
+    Args:
+        output_path: Path where the CSV file will be saved.
+        verbose: Enable verbose logging.
+    """
+    _setup_logging(verbose)
+
+    try:
+        from oellm.interactive_csv_builder import build_csv_interactive
+
+        build_csv_interactive(output_path)
+    except ImportError:
+        console = Console()
+        console.print(
+            "[red]Interactive CSV builder requires questionary. Install with: pip install questionary[/red]"
+        )
+        return
+
+
 def main():
-    auto_cli({"schedule-eval": schedule_evals}, as_positional=False)
+    auto_cli(
+        {"schedule-eval": schedule_evals, "build-csv": build_csv}, as_positional=False
+    )

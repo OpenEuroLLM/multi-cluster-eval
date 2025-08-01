@@ -13,6 +13,7 @@ dependencies = [
     "lm-eval",
     "huggingface_hub",
     "pyyaml",
+    "questionary",
 ]
 
 [project.scripts]
