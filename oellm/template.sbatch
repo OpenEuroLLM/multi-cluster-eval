@@ -11,6 +11,7 @@
 
 CSV_PATH="{csv_path}"
 NUM_JOBS={num_jobs}
+TOTAL_EVALS={total_evals}
 
 # avoiding crashes due to compute nodes not having access to the internet
 export HF_HOME=$HF_HOME
@@ -24,18 +25,17 @@ export HF_HUB_OFFLINE=1
 # Path to the shared Singularity image that contains all runtime deps
 export EVAL_SIF_PATH="$EVAL_BASE_DIR/$EVAL_CONTAINER_IMAGE"
 
-echo "Running eval on $CSV_PATH with $NUM_JOBS concurrent jobs on $SBATCH_PARTITION with $SBATCH_GPUS_PER_NODE GPUs per node"
+echo "Running eval on $CSV_PATH with $NUM_JOBS array jobs distributing $TOTAL_EVALS evaluations"
 echo "SLURM_JOB_ID: $SLURM_JOB_ID"
 echo "SLURM_ARRAY_JOB_ID: $SLURM_ARRAY_JOB_ID"
-
-TOTAL_EVALS=$(($(wc -l < "$CSV_PATH") - 1))
-echo "Total evaluations to run: $TOTAL_EVALS"
+echo "SLURM_ARRAY_TASK_ID: $SLURM_ARRAY_TASK_ID"
 
 if [ "$TOTAL_EVALS" -lt 1 ]; then
     echo "No evaluations to run. Exiting."
     exit 0
 fi
 
+# Calculate how many evaluations each array job should handle
 EVALS_PER_JOB=$(((TOTAL_EVALS + NUM_JOBS - 1) / NUM_JOBS))
 
 START_INDEX=$((SLURM_ARRAY_TASK_ID * EVALS_PER_JOB + 1))
@@ -45,7 +45,8 @@ if [ "$END_INDEX" -gt "$TOTAL_EVALS" ]; then
     END_INDEX=$TOTAL_EVALS
 fi
 
-echo "This job will process evaluations from index $START_INDEX to $END_INDEX."
+echo "This job (array task $SLURM_ARRAY_TASK_ID) will process evaluations from index $START_INDEX to $END_INDEX."
+echo "Each array job handles approximately $EVALS_PER_JOB evaluations."
 
 if [ "$START_INDEX" -gt "$END_INDEX" ]; then
     echo "No evaluations for this job to run. Exiting."
