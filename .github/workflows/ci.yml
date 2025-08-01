@@ -21,23 +21,17 @@ jobs:
     - name: Set up Python 3.12
       run: uv python install 3.12
 
-    - name: Install dependencies
-      run: |
-        uv venv
-        uv pip install ruff
-
     - name: Check code formatting with Ruff
       run: |
-        uv run ruff format --check --diff .
+        uvx ruff format --check --diff .
 
     - name: Lint with Ruff
       run: |
-        uv run ruff check .
+        uvx ruff check .
 
     - name: Type check with mypy
       run: |
-        uv pip install mypy
-        uv run mypy . --ignore-missing-imports || true
+        uvx mypy . --ignore-missing-imports || true
       continue-on-error: true
 
   yaml-lint:
@@ -53,13 +47,8 @@ jobs:
     - name: Set up Python 3.12
       run: uv python install 3.12
 
-    - name: Install yamllint
-      run: |
-        uv venv
-        uv pip install yamllint
-
     - name: Lint YAML files
       run: |
-        uv run yamllint . || true
+        uvx yamllint . || true
       continue-on-error: true
 
