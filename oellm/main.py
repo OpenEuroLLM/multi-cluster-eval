@@ -487,14 +487,8 @@ def schedule_evals(
     
     # Maximum runtime per job (18 hours with safety margin)
     max_minutes_per_job = 18 * 60  # 18 hours
-    
-    # Calculate minimum array size needed to stay under 18 hours per job
     min_array_size_for_time = max(1, int(np.ceil(total_minutes / max_minutes_per_job)))
-    
-    # Start with 32 jobs if we have enough evals, otherwise use the number of evals
-    desired_array_size = min(32, total_evals) if total_evals >= 32 else total_evals
-    
-    # If 32 jobs would exceed time limit, increase array size
+    desired_array_size = min(128, total_evals) if total_evals >= 128 else total_evals
     if desired_array_size < min_array_size_for_time:
         desired_array_size = min_array_size_for_time
     
