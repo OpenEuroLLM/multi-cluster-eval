@@ -13,35 +13,31 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python 3.12
-      uses: actions/setup-python@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
       with:
-        python-version: "3.12"
+        version: "latest"
 
-    - name: Cache pip packages
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
+    - name: Set up Python 3.12
+      run: uv python install 3.12
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install ruff
+        uv venv
+        uv pip install ruff
 
     - name: Check code formatting with Ruff
       run: |
-        ruff format --check --diff .
+        uv run ruff format --check --diff .
 
     - name: Lint with Ruff
       run: |
-        ruff check .
+        uv run ruff check .
 
     - name: Type check with mypy
       run: |
-        mypy . --ignore-missing-imports || true
+        uv pip install mypy
+        uv run mypy . --ignore-missing-imports || true
       continue-on-error: true
 
   yaml-lint:
@@ -49,18 +45,22 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
       with:
-        python-version: "3.12"
+        version: "latest"
+
+    - name: Set up Python 3.12
+      run: uv python install 3.12
 
     - name: Install yamllint
       run: |
-        pip install yamllint
+        uv venv
+        uv pip install yamllint
 
     - name: Lint YAML files
       run: |
-        yamllint . || true
+        uv run yamllint . || true
       continue-on-error: true
 
   shell-lint:
