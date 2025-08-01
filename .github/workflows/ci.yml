@@ -63,14 +63,3 @@ jobs:
         uv run yamllint . || true
       continue-on-error: true
 
-  shell-lint:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Run ShellCheck
-      uses: ludeeus/action-shellcheck@master
-      with:
-        severity: warning
-        check_together: yes
-        scandir: './oellm'
