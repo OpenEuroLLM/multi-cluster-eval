@@ -181,7 +181,9 @@ def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
             )
 
             if "," in model:
-                model_kwargs = dict([kv.split("=") for kv in model.split(",") if "=" in kv])
+                model_kwargs = dict(
+                    [kv.split("=") for kv in model.split(",") if "=" in kv]
+                )
 
                 # The first element before the comma is the repository ID on the 🤗 Hub
                 repo_id = model.split(",")[0]
