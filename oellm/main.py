@@ -1,5 +1,4 @@
 # Standard library imports
-import yaml
 import logging
 import os
 import re
@@ -12,6 +11,7 @@ from string import Template
 from typing import Iterable
 
 import pandas as pd
+import yaml
 from huggingface_hub import hf_hub_download, snapshot_download
 from jsonargparse import auto_cli
 from rich.console import Console
@@ -22,7 +22,7 @@ def ensure_singularity_image(image_name: str) -> None:
     # TODO: switch to OELLM dataset repo once it is created
     hf_repo = os.environ.get("HF_SIF_REPO", "timurcarstensen/testing")
     image_path = Path(os.getenv("EVAL_BASE_DIR")) / image_name
-    
+
     try:
         hf_hub_download(
             repo_id=hf_repo,
@@ -30,15 +30,15 @@ def ensure_singularity_image(image_name: str) -> None:
             repo_type="dataset",
             local_dir=os.getenv("EVAL_BASE_DIR"),
         )
-        logging.info("Successfully downloaded latest Singularity image from HuggingFace")
+        logging.info(
+            "Successfully downloaded latest Singularity image from HuggingFace"
+        )
     except Exception as e:
         logging.warning(
             "Failed to fetch latest container image from HuggingFace: %s", str(e)
         )
         if image_path.exists():
-            logging.info(
-                "Using existing Singularity image at %s", image_path
-            )
+            logging.info("Using existing Singularity image at %s", image_path)
         else:
             raise RuntimeError(
                 f"No container image found at {image_path} and failed to download from HuggingFace. "
@@ -79,7 +79,7 @@ def _load_cluster_env() -> None:
     """
     Loads the correct cluster environment variables from `clusters.yaml` based on the hostname.
     """
-    with open(Path(__file__).parent / "clusters.yaml", "r") as f:
+    with open(Path(__file__).parent / "clusters.yaml") as f:
         clusters = yaml.safe_load(f)
     hostname = socket.gethostname()
 
@@ -181,10 +181,7 @@ def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
             )
 
             if "," in model:
-                model_kwargs = {
-                    k: v
-                    for k, v in [kv.split("=") for kv in model.split(",") if "=" in kv]
-                }
+                model_kwargs = dict([kv.split("=") for kv in model.split(",") if "=" in kv])
 
                 # The first element before the comma is the repository ID on the 🤗 Hub
                 repo_id = model.split(",")[0]
@@ -359,16 +356,20 @@ def schedule_evals(
                         expanded_rows.append(new_row)
             df = pd.DataFrame(expanded_rows)
         else:
-            logging.info("Skipping model path processing and validation (--skip-checks enabled)")
+            logging.info(
+                "Skipping model path processing and validation (--skip-checks enabled)"
+            )
 
     elif models and tasks and n_shot is not None:
         if not skip_checks:
             model_path_map = _process_model_paths(models.split(","))
             model_paths = [p for paths in model_path_map.values() for p in paths]
         else:
-            logging.info("Skipping model path processing and validation (--skip-checks enabled)")
+            logging.info(
+                "Skipping model path processing and validation (--skip-checks enabled)"
+            )
             model_paths = models.split(",")
-        
+
         tasks_list = tasks.split(",")
 
         # cross product of model_paths and tasks into a dataframe
@@ -425,7 +426,7 @@ def schedule_evals(
 
     logging.debug(f"Saved evaluation dataframe to temporary CSV: {csv_path}")
 
-    with open(Path(__file__).parent / "template.sbatch", "r") as f:
+    with open(Path(__file__).parent / "template.sbatch") as f:
         sbatch_template = f.read()
 
     # replace the placeholders in the template with the actual values
@@ -468,17 +469,18 @@ def schedule_evals(
         )
         logging.info("Job submitted successfully.")
         logging.info(result.stdout)
-        
+
         # Provide helpful information about job monitoring and file locations
         logging.info(f"📁 Evaluation directory: {evals_dir}")
         logging.info(f"📄 SLURM script: {sbatch_script_path}")
         logging.info(f"📋 Job configuration: {csv_path}")
         logging.info(f"📜 SLURM logs will be stored in: {slurm_logs_dir}")
         logging.info(f"📊 Results will be stored in: {evals_dir / 'results'}")
-        
+
         # Extract job ID from sbatch output for monitoring commands
         import re
-        job_id_match = re.search(r'Submitted batch job (\d+)', result.stdout)
+
+        job_id_match = re.search(r"Submitted batch job (\d+)", result.stdout)
         if job_id_match:
             job_id = job_id_match.group(1)
             logging.info(f"🔍 Monitor job status: squeue -j {job_id}")
