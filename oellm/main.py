@@ -115,7 +115,7 @@ def _load_cluster_env() -> None:
             if len(e.args) > 1:
                 raise ValueError(
                     f"Env. variable substitution for {k} failed. Missing keys: {', '.join(e.args)}"
-                )
+                ) from e
 
             missing_key: str = e.args[0]
             os.environ[k] = str(v).format(
