@@ -33,20 +33,20 @@ This will automatically:
 Due to the limit space in $HOME on JSC clusters, you must set these `uv` specific environment variables to avoid running out of space:
 
 ```bash
-export UV_CACHE_DIR="<some-workspace-dir>/.cache"
+export UV_CACHE_DIR="<some-workspace-dir>/.cache/uv-cache"
 export UV_INSTALL_DIR="<some-workspace>/.local"
 export UV_PYTHON_INSTALL_DIR="<some-workspace>/.local/share/uv/python"
-export UV_TOOL_DIR="<some-workspace-dir>/.cache"
+export UV_TOOL_DIR="<some-workspace-dir>/.cache/uv-tool-cache"
 ```
 
 You can set these variables in your `.bashrc` or `.zshrc` file, depending on your shell of preference.
 
 E.g., I have a user-folder in the `synthlaion` project, so I set the following variables:
 ```bash
-export UV_CACHE_DIR="/p/project1/synthlaion/$USER/.cache"
+export UV_CACHE_DIR="/p/project1/synthlaion/$USER/.cache/uv-cache"
 export UV_INSTALL_DIR="/p/project1/synthlaion/$USER/.local"
 export UV_PYTHON_INSTALL_DIR="/p/project1/synthlaion/$USER/.local/share/uv/python"
-export UV_TOOL_DIR="/p/project1/synthlaion/$USER/.cache"
+export UV_TOOL_DIR="/p/project1/synthlaion/$USER/.cache/uv-tool-cache"
 ```
 
 ### General Installation
