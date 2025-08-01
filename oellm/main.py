@@ -10,6 +10,7 @@ from pathlib import Path
 from string import Template
 from typing import Iterable
 
+import numpy as np
 import pandas as pd
 import yaml
 # Heavy imports moved to where they're needed
@@ -479,9 +480,51 @@ def schedule_evals(
     with open(Path(__file__).parent / "template.sbatch", "r") as f:
         sbatch_template = f.read()
 
-    # Calculate the actual number of array jobs based on queue limit
-    # The array job size should be at most the remaining queue capacity or max_array_len
-    actual_array_size = min(remaining_queue_capacity, max_array_len, len(df))
+    # Calculate dynamic array size and time limits
+    total_evals = len(df)
+    minutes_per_eval = 10  # Budget 10 minutes per eval
+    total_minutes = total_evals * minutes_per_eval
+    
+    # Maximum runtime per job (18 hours with safety margin)
+    max_minutes_per_job = 18 * 60  # 18 hours
+    
+    # Calculate minimum array size needed to stay under 18 hours per job
+    min_array_size_for_time = max(1, int(np.ceil(total_minutes / max_minutes_per_job)))
+    
+    # Start with 32 jobs if we have enough evals, otherwise use the number of evals
+    desired_array_size = min(32, total_evals) if total_evals >= 32 else total_evals
+    
+    # If 32 jobs would exceed time limit, increase array size
+    if desired_array_size < min_array_size_for_time:
+        desired_array_size = min_array_size_for_time
+    
+    # The actual array size is limited by queue capacity and total evals
+    actual_array_size = min(remaining_queue_capacity, desired_array_size, total_evals)
+    
+    # Calculate actual time per job
+    evals_per_job = max(1, int(np.ceil(total_evals / actual_array_size)))
+    minutes_per_job = evals_per_job * minutes_per_eval
+    
+    # Add 20% safety margin and round up to nearest hour
+    minutes_with_margin = int(minutes_per_job * 1.2)
+    hours_with_margin = max(1, int(np.ceil(minutes_with_margin / 60)))
+    
+    # Cap at 24 hours
+    hours_with_margin = min(hours_with_margin, 24)
+    
+    # Format time limit for SLURM (HH:MM:SS)
+    time_limit = f"{hours_with_margin:02d}:00:00"
+    
+    # Log the calculated values
+    logging.info(f"📊 Evaluation planning:")
+    logging.info(f"   Total evaluations: {total_evals}")
+    logging.info(f"   Estimated time per eval: {minutes_per_eval} minutes")
+    logging.info(f"   Total estimated time: {total_minutes} minutes ({total_minutes/60:.1f} hours)")
+    logging.info(f"   Desired array size: {desired_array_size}")
+    logging.info(f"   Actual array size: {actual_array_size} (limited by queue capacity: {remaining_queue_capacity})")
+    logging.info(f"   Evaluations per job: {evals_per_job}")
+    logging.info(f"   Time per job: {minutes_per_job} minutes ({minutes_per_job/60:.1f} hours)")
+    logging.info(f"   Time limit with safety margin: {time_limit}")
 
     # replace the placeholders in the template with the actual values
     # First, replace python-style placeholders
@@ -493,6 +536,7 @@ def schedule_evals(
         total_evals=len(df),  # Pass the total number of evaluations
         log_dir=evals_dir / "slurm_logs",
         evals_dir=str(evals_dir / "results"),
+        time_limit=time_limit,  # Dynamic time limit
     )
 
     # substitute any $ENV_VAR occurrences (e.g., $TIME_LIMIT) since env vars are not
@@ -542,6 +586,7 @@ def schedule_evals(
         logging.info(
             f"📈 Each array job handles ~{(len(df) + actual_array_size - 1) // actual_array_size} evaluations"
         )
+        logging.info(f"⏱️  Time limit per job: {time_limit}")
 
         # Extract job ID from sbatch output for monitoring commands
         import re

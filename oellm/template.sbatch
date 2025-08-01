@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=oellm-eval
-#SBATCH --time=$TIME_LIMIT
+#SBATCH --time={time_limit}
 #SBATCH --gres=gpu:$GPUS_PER_NODE
 #SBATCH --output={log_dir}/%x-%A-%a.out
 #SBATCH --partition=$PARTITION
