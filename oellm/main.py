@@ -12,7 +12,7 @@ from typing import Iterable
 
 import pandas as pd
 import yaml
-from huggingface_hub import hf_hub_download, snapshot_download
+# Heavy imports moved to where they're needed
 from jsonargparse import auto_cli
 from rich.console import Console
 from rich.logging import RichHandler
@@ -20,6 +20,8 @@ from rich.logging import RichHandler
 
 def ensure_singularity_image(image_name: str) -> None:
     # TODO: switch to OELLM dataset repo once it is created
+    from huggingface_hub import hf_hub_download
+    
     hf_repo = os.environ.get("HF_SIF_REPO", "timurcarstensen/testing")
     image_path = Path(os.getenv("EVAL_BASE_DIR")) / image_name
 
@@ -144,6 +146,32 @@ def _parse_user_queue_load() -> int:
     return 0
 
 
+def _expand_local_model_paths(model: str) -> list[Path]:
+    """
+    Expands a local model path to include all checkpoints if it's a directory.
+    Returns empty list if not a local path.
+    """
+    model_paths = []
+    if Path(model).exists() and Path(model).is_dir():
+        # could either be the direct path to a local model checkpoint dir or a directory that contains a lot of
+        # intermediate checkpoints from training of the structure: `model_name/hf/iter_1`, `model_name/hf/iter_2` ...
+        # or `model_name/iter_1`, `model_name/iter_2` ...
+        # The base case is that `model_name` is a directory that contains the model in a HF checkpoint format
+
+        # Basecase: check if the directory contains a `.safetensors` file
+        if any(Path(model).glob("*.safetensors")):
+            model_paths.append(Path(model))
+
+        # check if dir contains subdirs that themselves contain a `.safetensors` file
+        model_path_base = (
+            Path(model) / "hf" if "hf" not in Path(model).name else Path(model)
+        )
+        for subdir in model_path_base.glob("*"):
+            if subdir.is_dir() and any(subdir.glob("*.safetensors")):
+                model_paths.append(subdir)
+    return model_paths
+
+
 def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
     """
     Processes model strings into a dict of model paths.
@@ -151,27 +179,15 @@ def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
     Each model string can be a local path or a huggingface model identifier.
     This function expands directory paths that contain multiple checkpoints.
     """
+    from huggingface_hub import snapshot_download
+    
     processed_model_paths = {}
     model_paths = []
     for model in models:
-        if Path(model).exists() and Path(model).is_dir():
-            # could either be the direct path to a local model checkpoint dir or a directory that contains a lot of
-            # intermediate checkpoints from training of the structure: `model_name/hf/iter_1`, `model_name/hf/iter_2` ...
-            # or `model_name/iter_1`, `model_name/iter_2` ...
-            # The base case is that `model_name` is a directory that contains the model in a HF checkpoint format
-
-            # Basecase: check if the directory contains a `.safetensors` file
-            if any(Path(model).glob("*.safetensors")):
-                model_paths.append(Path(model))
-
-            # check if dir contains subdirs that themselves contain a `.safetensors` file
-            model_path_base = (
-                Path(model) / "hf" if "hf" not in Path(model).name else Path(model)
-            )
-            for subdir in model_path_base.glob("*"):
-                if subdir.is_dir() and any(subdir.glob("*.safetensors")):
-                    model_paths.append(subdir)
-
+        # First try to expand local paths
+        local_paths = _expand_local_model_paths(model)
+        if local_paths:
+            model_paths.extend(local_paths)
         else:
             logging.info(
                 f"Model {model} not found locally, assuming it is a 🤗 hub model"
@@ -344,34 +360,65 @@ def schedule_evals(
                 f"CSV file must contain the columns: {', '.join(required_cols)}"
             )
 
+        # Always expand local model paths, even with skip_checks
+        unique_models = df["model_path"].unique()
+        expanded_rows = []
+        for _, row in df.iterrows():
+            original_model_path = row["model_path"]
+            local_paths = _expand_local_model_paths(original_model_path)
+            if local_paths:
+                # Use expanded local paths
+                for expanded_path in local_paths:
+                    new_row = row.copy()
+                    new_row["model_path"] = expanded_path
+                    expanded_rows.append(new_row)
+            else:
+                # Keep original path (might be HF model)
+                expanded_rows.append(row)
+        df = pd.DataFrame(expanded_rows)
+        
+        # Download HF models only if skip_checks is False
         if not skip_checks:
-            unique_models = df["model_path"].unique()
-            model_path_map = _process_model_paths(unique_models)
-
-            # Create a new DataFrame with the expanded model paths
-            expanded_rows = []
-            for _, row in df.iterrows():
-                original_model_path = row["model_path"]
-                if original_model_path in model_path_map:
-                    for expanded_path in model_path_map[original_model_path]:
-                        new_row = row.copy()
-                        new_row["model_path"] = expanded_path
-                        expanded_rows.append(new_row)
-            df = pd.DataFrame(expanded_rows)
+            # Process any HF models that need downloading
+            hf_models = [m for m in df["model_path"].unique() if not Path(m).exists()]
+            if hf_models:
+                model_path_map = _process_model_paths(hf_models)
+                # Update the dataframe with processed HF models
+                for idx, row in df.iterrows():
+                    if row["model_path"] in model_path_map:
+                        # This shouldn't expand further, just update the path
+                        df.at[idx, "model_path"] = model_path_map[row["model_path"]][0]
         else:
             logging.info(
-                "Skipping model path processing and validation (--skip-checks enabled)"
+                "Skipping HuggingFace model downloads (--skip-checks enabled)"
             )
 
     elif models and tasks and n_shot is not None:
+        model_list = models.split(",")
+        model_paths = []
+        
+        # Always expand local paths
+        for model in model_list:
+            local_paths = _expand_local_model_paths(model)
+            if local_paths:
+                model_paths.extend(local_paths)
+            else:
+                model_paths.append(model)
+        
+        # Download HF models only if skip_checks is False
         if not skip_checks:
-            model_path_map = _process_model_paths(models.split(","))
-            model_paths = [p for paths in model_path_map.values() for p in paths]
+            hf_models = [m for m in model_paths if not Path(m).exists()]
+            if hf_models:
+                model_path_map = _process_model_paths(hf_models)
+                # Replace HF model identifiers with processed paths
+                model_paths = [
+                    model_path_map[m][0] if m in model_path_map else m
+                    for m in model_paths
+                ]
         else:
             logging.info(
-                "Skipping model path processing and validation (--skip-checks enabled)"
+                "Skipping HuggingFace model downloads (--skip-checks enabled)"
             )
-            model_paths = models.split(",")
 
         tasks_list = tasks.split(",")
 
