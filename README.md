@@ -6,7 +6,6 @@ A package for running evaluations across multiple HPC clusters using SLURM job a
 
 **Prerequisites:**
 - install [uv](https://docs.astral.sh/uv/#installation)
-- Make sure you're part of the [OpenEuroLLM](https://huggingface.co/OpenEuroLLM) organization on HuggingFace and are logged in (i.e., `HF_TOKEN` is set in your environment). 
 
 ```bash
 # Install the package
@@ -25,12 +24,14 @@ This will automatically:
 - Generate a SLURM job array to evaluate all model-task combinations
 - Submit the jobs with appropriate cluster-specific resource allocations
 
+In case you meet HuggingFace quotas issues, make sure you are logged in by setting your `HF_TOKEN` and that you are part of [OpenEuroLLM](https://huggingface.co/OpenEuroLLM) organization. 
+
 
 ## Installation
 
 ### JURECA/JSC Specifics
 
-Due to the limit space in $HOME on JSC clusters, you must set these `uv` specific environment variables to avoid running out of space:
+Due to the limit space in `$HOME` on JSC clusters, you must set these `uv` specific environment variables to avoid running out of space:
 
 ```bash
 export UV_CACHE_DIR="<some-workspace-dir>/.cache/uv-cache"
@@ -75,7 +76,7 @@ The `oellm` package orchestrates distributed LLM evaluations through the followi
 
 ### 1. **Cluster Auto-Detection**
 - Automatically detects the current HPC cluster based on hostname patterns
-- Loads cluster-specific configurations from `clusters.yaml` including:
+- Loads cluster-specific configurations from [`clusters.yaml`](oellm/clusters.yaml) including:
   - SLURM partition and account settings
   - Shared storage paths for models, datasets, and results
   - GPU allocation and queue limits
