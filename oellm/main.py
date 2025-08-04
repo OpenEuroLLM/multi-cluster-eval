@@ -462,7 +462,7 @@ def schedule_evals(
 
     # Submit the job script to slurm by piping the script content to sbatch
     try:
-        logging.info(f"Calling sbatch to launch the evaluations")
+        logging.info("Calling sbatch to launch the evaluations")
 
         # Provide helpful information about job monitoring and file locations
         logging.info(f"📁 Evaluation directory: {evals_dir}")
