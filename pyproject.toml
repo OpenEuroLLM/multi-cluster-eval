@@ -1,7 +1,7 @@
 [project]
 name = "oellm"
 version = "0.1.0"
-description = "OpenEuroLLM evaluation package"
+description = "OpenEuroLLM CLI"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

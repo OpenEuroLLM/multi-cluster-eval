@@ -1,6 +1,15 @@
-# OpenEuroLLM Evaluation Package (oellm)
+# OpenEuroLLM CLI (oellm)
 
-A package for running evaluations across multiple HPC clusters using SLURM job arrays and Singularity containers. 
+A package for running OELLM CLI workflows across multiple HPC clusters using SLURM job arrays and Singularity containers. 
+
+## Currently supported workflows
+-  Schedule evaluations on multiple models and tasks on all clusters ✅
+
+## Planned workflows
+- Restart failed evaluations (e.g., due to node failures)
+- Sync and download evaluation results from all clusters via a shared data layer
+- Schedule training jobs on all clusters
+- Schedule conversions from MegatronLM to HuggingFace
 
 ## Quick Example
 
@@ -9,7 +18,7 @@ A package for running evaluations across multiple HPC clusters using SLURM job a
 
 ```bash
 # Install the package
-uv tool install git+https://github.com/OpenEuroLLM/multi-cluster-eval.git
+uv tool install git+https://github.com/OpenEuroLLM/oellm-cli.git
 
 # Run evaluations on multiple models and tasks
 oellm schedule-eval \
@@ -55,7 +64,7 @@ export UV_TOOL_DIR="/p/project1/synthlaion/$USER/.cache/uv-tool-cache"
 Install directly from the git repository using uv:
 
 ```bash
-uv tool install git+https://github.com/OpenEuroLLM/multi-cluster-eval.git
+uv tool install git+https://github.com/OpenEuroLLM/oellm-cli.git
 ```
 
 This makes the `oellm` command available globally in your shell.
@@ -67,7 +76,7 @@ uv tool upgrade oellm
 
 If you had previously installed the package from a different source and would like to overwrite it, you can run the following command:
 ```bash
-uv tool install git+https://github.com/OpenEuroLLM/multi-cluster-eval.git --force
+uv tool install git+https://github.com/OpenEuroLLM/oellm-cli.git --force
 ```
 
 ## High-Level Evaluation Workflow
