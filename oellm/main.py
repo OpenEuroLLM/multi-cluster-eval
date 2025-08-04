@@ -483,7 +483,7 @@ def schedule_evals(
         logging.info(result.stdout)
 
         # Extract job ID from sbatch output for monitoring commands
-        job_id_match = re.search(r'Submitted batch job (\d+)', result.stdout)
+        job_id_match = re.search(r"Submitted batch job (\d+)", result.stdout)
         if job_id_match:
             job_id = job_id_match.group(1)
             logging.info(f"🔍 Monitor job status: squeue -j {job_id}")
