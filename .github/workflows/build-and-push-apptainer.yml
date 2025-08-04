@@ -40,18 +40,18 @@ jobs:
           apptainer --verbose build --fakeroot eval_env-${{ matrix.image }}.sif apptainer/${{ matrix.image }}.def
 
       - name: Install Hugging Face Hub CLI
-        run: pip install --upgrade "huggingface_hub[cli]"
+        run: pip install --upgrade "huggingface_hub"
 
       - name: Login to Hugging Face Hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: huggingface-cli login --token "$HF_TOKEN"  
+        run: hf auth login --token "$HF_TOKEN"  
 
       - name: Upload SIF to Hugging Face Hub
         env:
           HF_REPO: openeurollm/evaluation_singularity_images
         run: |
-          huggingface-cli upload \
+          hf upload \
             "$HF_REPO" \
             eval_env-${{ matrix.image }}.sif \
             eval_env-${{ matrix.image }}.sif \
