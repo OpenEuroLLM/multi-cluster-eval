@@ -499,4 +499,17 @@ def schedule_evals(
 
 
 def main():
-    auto_cli({"schedule-eval": schedule_evals}, as_positional=False)
+    auto_cli(
+        {
+            "schedule-eval": {
+                "_help": "Schedule evaluation jobs for models and tasks",
+                "schedule-eval": schedule_evals,
+            },
+            "collect-results": {
+                "_help": "Collect evaluation results from JSON files and export to CSV",
+                "collect-results": collect_results,
+            },
+        },
+        as_positional=False,
+        description="OELLM: Multi-cluster evaluation tool for language models",
+    )
