@@ -99,8 +99,7 @@ do
             --tasks "$task_path" \
             --num_fewshot "$n_shot" \
             --output_path "{evals_dir}/$(openssl rand -hex 5).json" \
-            --trust_remote_code \
-            --log_samples
+            --trust_remote_code
 
     echo "Evaluation finished for model: $model_path"
 
