@@ -498,6 +498,341 @@ def schedule_evals(
         )
 
 
+def collect_results(
+    results_dir: str,
+    output_csv: str = "eval_results.csv",
+    *,
+    check: bool = False,
+    verbose: bool = False,
+) -> None:
+    """
+    Collect evaluation results from JSON files and export to CSV.
+
+    Args:
+        results_dir: Path to the directory containing result JSON files
+        output_csv: Output CSV filename (default: eval_results.csv)
+        check: Check for crashed or pending evaluations
+        verbose: Enable verbose logging
+    """
+    import json
+
+    _setup_logging(verbose)
+
+    results_path = Path(results_dir)
+    if not results_path.exists():
+        raise ValueError(f"Results directory does not exist: {results_dir}")
+
+    # Check if we need to look in a 'results' subdirectory
+    if (results_path / "results").exists() and (results_path / "results").is_dir():
+        # User passed the top-level directory, look in results subdirectory
+        json_files = list((results_path / "results").glob("*.json"))
+    else:
+        # User passed the results directory directly
+        json_files = list(results_path.glob("*.json"))
+
+    if not json_files:
+        logging.warning(f"No JSON files found in {results_dir}")
+        if not check:
+            return
+
+    logging.info(f"Found {len(json_files)} result files")
+
+    # If check mode, also load the jobs.csv to compare
+    if check:
+        jobs_csv_path = results_path / "jobs.csv"
+        if not jobs_csv_path.exists():
+            logging.warning(f"No jobs.csv found in {results_dir}, cannot perform check")
+            check = False
+        else:
+            jobs_df = pd.read_csv(jobs_csv_path)
+            logging.info(f"Found {len(jobs_df)} scheduled jobs in jobs.csv")
+
+    # Collect results
+    rows = []
+    completed_jobs = set()  # Track (model, task, n_shot) tuples
+    results_with_performance = (
+        0  # Track how many results actually have performance data
+    )
+
+    for json_file in json_files:
+        try:
+            with open(json_file) as f:
+                data = json.load(f)
+
+            # Extract model name/path
+            model_name = data.get("model_name", "unknown")
+
+            # Extract results for each task
+            results = data.get("results", {})
+            n_shot_data = data.get("n-shot", {})
+
+            for task_name, task_results in results.items():
+                # Skip MMLU subtasks - only keep the aggregate score
+                if task_name.startswith("mmlu_") and task_name != "mmlu":
+                    continue
+
+                # Get n_shot for this task
+                n_shot = n_shot_data.get(task_name, "unknown")
+
+                # Special handling for MMLU aggregate - get n_shot from any MMLU subtask
+                if task_name == "mmlu" and n_shot == "unknown":
+                    for key, value in n_shot_data.items():
+                        if key.startswith("mmlu_"):
+                            n_shot = value
+                            break
+
+                # Get the primary metric (usually acc,none)
+                performance = task_results.get("acc,none")
+                if performance is None:
+                    # Try other common metric names
+                    for metric in ["acc", "accuracy", "f1", "exact_match"]:
+                        if metric in task_results:
+                            performance = task_results[metric]
+                            break
+
+                if performance is not None:
+                    results_with_performance += 1
+
+                    # Track completed job for check mode (only if we have a result)
+                    if check:
+                        completed_jobs.add((model_name, task_name, n_shot))
+
+                    rows.append(
+                        {
+                            "model_name": model_name,
+                            "task": task_name,
+                            "n_shot": n_shot,
+                            "performance": performance,
+                        }
+                    )
+                else:
+                    # Debug: log cases where we have a task but no performance metric
+                    if verbose:
+                        logging.debug(
+                            f"No performance metric found for {model_name} | {task_name} | n_shot={n_shot} in {json_file.name}"
+                        )
+
+        except Exception as e:
+            logging.warning(f"Failed to process {json_file}: {e}")
+            if verbose:
+                logging.exception(e)
+
+    if not rows and not check:
+        logging.warning("No results extracted from JSON files")
+        return
+
+    # Create DataFrame and save to CSV (if we have results)
+    if rows:
+        df = pd.DataFrame(rows)
+        df.to_csv(output_csv, index=False)
+        logging.info(f"Results saved to {output_csv}")
+        logging.info(f"Extracted {len(df)} evaluation results")
+
+        # Print summary statistics
+        if verbose:
+            logging.info("\nSummary:")
+            logging.info(f"Unique models: {df['model_name'].nunique()}")
+            logging.info(f"Unique tasks: {df['task'].nunique()}")
+            logging.info(
+                f"N-shot values: {sorted(str(x) for x in df['n_shot'].unique())}"
+            )
+
+    # Perform check analysis if requested
+    if check:
+        logging.info("\n=== Evaluation Status Check ===")
+
+        # Parse SLURM logs to get more detailed status
+        slurm_logs_dir = results_path / "slurm_logs"
+        attempted_jobs = set()  # Jobs that were attempted (started)
+        failed_jobs = set()  # Jobs that crashed/failed
+
+        if slurm_logs_dir.exists():
+            # Parse .out files to find attempted jobs
+            for out_file in slurm_logs_dir.glob("*.out"):
+                try:
+                    with open(out_file) as f:
+                        content = f.read()
+                        # Look for "Starting evaluation for:" patterns
+                        import re
+
+                        pattern = r"Starting evaluation for:\s*\n\s*Model: (.+)\s*\n\s*Task: (.+)\s*\n\s*N-shot: (\d+)"
+                        matches = re.findall(pattern, content)
+                        for model, task, n_shot in matches:
+                            attempted_jobs.add(
+                                (model.strip(), task.strip(), int(n_shot.strip()))
+                            )
+
+                        # Check if job finished successfully
+                        if "Job" in content and "finished." in content:
+                            # This array job completed successfully
+                            pass
+                        else:
+                            # Job might have crashed - check for specific patterns
+                            if (
+                                "Traceback" in content
+                                or "Error" in content
+                                or "Exception" in content
+                            ):
+                                for model, task, n_shot in matches:
+                                    failed_jobs.add(
+                                        (
+                                            model.strip(),
+                                            task.strip(),
+                                            int(n_shot.strip()),
+                                        )
+                                    )
+                except Exception as e:
+                    logging.debug(f"Error parsing {out_file}: {e}")
+
+            # Parse .err files for errors
+            for err_file in slurm_logs_dir.glob("*.err"):
+                try:
+                    file_size = err_file.stat().st_size
+                    if file_size > 0:  # Non-empty error file
+                        # Extract array task ID from filename
+                        array_id_match = re.search(r"-(\d+)\.err$", err_file.name)
+                        if array_id_match:
+                            int(array_id_match.group(1))
+                            # Find corresponding .out file to get job details
+                            out_file = err_file.with_suffix(".out")
+                            if out_file.exists():
+                                with open(out_file) as f:
+                                    content = f.read()
+                                    pattern = r"Starting evaluation for:\s*\n\s*Model: (.+)\s*\n\s*Task: (.+)\s*\n\s*N-shot: (\d+)"
+                                    matches = re.findall(pattern, content)
+                                    for model, task, n_shot in matches:
+                                        failed_jobs.add(
+                                            (
+                                                model.strip(),
+                                                task.strip(),
+                                                int(n_shot.strip()),
+                                            )
+                                        )
+                except Exception as e:
+                    logging.debug(f"Error parsing {err_file}: {e}")
+
+        # Categorize incomplete jobs
+        still_running_jobs = []  # Jobs that are likely still executing
+        never_attempted_jobs = []
+        crashed_jobs = []
+        needs_rerun_jobs = []  # Jobs that definitely need to be rescheduled
+
+        # We know we have exactly len(completed_jobs) completed jobs with actual results
+        # The rest need to be categorized
+        len(completed_jobs)
+
+        for _, job in jobs_df.iterrows():
+            job_tuple = (job["model_path"], job["task_path"], job["n_shot"])
+
+            # Check if this job corresponds to one of our completed results
+            # Use the same matching logic as before but don't over-count
+            is_completed = False
+
+            # Try to find a matching completed job
+            if job_tuple in completed_jobs:
+                is_completed = True
+            else:
+                # Try fuzzy matching
+                for completed_job in completed_jobs:
+                    completed_model, completed_task, completed_n_shot = completed_job
+
+                    if (
+                        job["n_shot"] == completed_n_shot
+                        and job["task_path"] == completed_task
+                        and (
+                            str(job["model_path"]).endswith(completed_model)
+                            or completed_model in str(job["model_path"])
+                        )
+                    ):
+                        is_completed = True
+                        break
+
+            if is_completed:
+                continue  # Skip completed jobs
+
+            # Job is not completed, categorize it
+            if job_tuple in failed_jobs:
+                crashed_jobs.append(job)
+                needs_rerun_jobs.append(job)
+            elif job_tuple not in attempted_jobs:
+                never_attempted_jobs.append(job)
+                needs_rerun_jobs.append(job)  # These likely need rescheduling too
+            else:
+                # Job was attempted but not completed and didn't crash - likely still running
+                still_running_jobs.append(job)
+
+        needs_rerun_df = pd.DataFrame(needs_rerun_jobs)
+
+        # Calculate completed jobs based on the jobs.csv perspective
+        actual_completed_from_jobs = (
+            len(jobs_df)
+            - len(still_running_jobs)
+            - len(crashed_jobs)
+            - len(never_attempted_jobs)
+        )
+
+        logging.info(f"\nTotal scheduled jobs: {len(jobs_df)}")
+        logging.info(
+            f"Completed jobs (from scheduled jobs): {actual_completed_from_jobs}"
+        )
+        logging.info(f"Still running/pending: {len(still_running_jobs)}")
+        logging.info(f"Failed/Crashed jobs: {len(crashed_jobs)}")
+        logging.info(f"Never attempted: {len(never_attempted_jobs)}")
+        logging.info(f"Jobs needing reschedule: {len(needs_rerun_jobs)}")
+
+        if verbose:
+            logging.info(f"Total CSV rows (results with performance data): {len(rows)}")
+            logging.info(
+                f"Unique completed jobs found in JSON files: {len(completed_jobs)}"
+            )
+            if len(completed_jobs) != actual_completed_from_jobs:
+                logging.info(
+                    f"Note: {len(completed_jobs)} results found vs {actual_completed_from_jobs} jobs matched from schedule"
+                )
+
+        if len(needs_rerun_jobs) > 0:
+            # Save jobs that need rescheduling
+            rerun_csv = output_csv.replace(".csv", "_needs_rerun.csv")
+            needs_rerun_df.to_csv(rerun_csv, index=False)
+            logging.info(f"\nJobs needing reschedule saved to: {rerun_csv}")
+            logging.info(
+                "You can re-run these with: oellm schedule-eval --eval_csv_path "
+                + rerun_csv
+            )
+
+            # Save crashed jobs separately if any
+            if crashed_jobs:
+                crashed_csv = output_csv.replace(".csv", "_crashed.csv")
+                pd.DataFrame(crashed_jobs).to_csv(crashed_csv, index=False)
+                logging.info(f"Crashed jobs specifically saved to: {crashed_csv}")
+
+            # Show some examples if verbose
+            if verbose and len(needs_rerun_jobs) > 0:
+                logging.info("\nExample jobs needing reschedule:")
+                for _i, (_, job) in enumerate(needs_rerun_df.head(5).iterrows()):
+                    if (
+                        job["model_path"],
+                        job["task_path"],
+                        job["n_shot"],
+                    ) in failed_jobs:
+                        status = "CRASHED"
+                    else:
+                        status = "NEVER ATTEMPTED"
+                    logging.info(
+                        f"  - [{status}] {job['model_path']} | {job['task_path']} | n_shot={job['n_shot']}"
+                    )
+                if len(needs_rerun_jobs) > 5:
+                    logging.info(f"  ... and {len(needs_rerun_jobs) - 5} more")
+
+        if still_running_jobs and verbose:
+            logging.info(
+                f"\nNote: {len(still_running_jobs)} jobs appear to still be running/pending."
+            )
+            logging.info(
+                "These were attempted but haven't completed yet. Check SLURM queue status."
+            )
+
+
 def main():
     auto_cli(
         {
