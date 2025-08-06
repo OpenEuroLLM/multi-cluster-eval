@@ -353,7 +353,7 @@ def schedule_evals(
             )
 
         # Always expand local model paths, even with skip_checks
-        unique_models = df["model_path"].unique()
+        df["model_path"].unique()
         expanded_rows = []
         for _, row in df.iterrows():
             original_model_path = row["model_path"]
@@ -627,8 +627,8 @@ def collect_results(
         verbose: Enable verbose logging
     """
     import json
+
     from rich.table import Table
-    from rich.panel import Panel
 
     _setup_logging(verbose)
     console = Console()
@@ -1017,9 +1017,7 @@ def collect_results(
                     ).ask()
 
                     if schedule_now:
-                        console.print(
-                            "\n[yellow]To schedule these jobs, run:[/yellow]"
-                        )
+                        console.print("\n[yellow]To schedule these jobs, run:[/yellow]")
                         console.print(
                             f"[bold cyan]oellm schedule-eval --eval_csv_path {rerun_csv}[/bold cyan]"
                         )
