@@ -11,3 +11,4 @@
 **/*.log
 **/*.out
 **/*.egg-info
+**/*.csv
