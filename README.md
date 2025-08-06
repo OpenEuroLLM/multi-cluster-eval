@@ -1,16 +1,24 @@
-# OpenEuroLLM Evaluation Package (oellm)
+# OpenEuroLLM CLI (oellm)
 
-A package for running evaluations across multiple HPC clusters using SLURM job arrays and Singularity containers. 
+A package for running OELLM CLI workflows across multiple HPC clusters using SLURM job arrays and Singularity containers. 
+
+## Currently supported workflows
+-  Schedule evaluations on multiple models and tasks on all clusters ✅
+
+## Planned workflows
+- Restart failed evaluations (e.g., due to node failures)
+- Sync and download evaluation results from all clusters via a shared data layer
+- Schedule training jobs on all clusters
+- Schedule conversions from MegatronLM to HuggingFace
 
 ## Quick Example
 
 **Prerequisites:**
 - install [uv](https://docs.astral.sh/uv/#installation)
-- Make sure you're part of the [OpenEuroLLM](https://huggingface.co/OpenEuroLLM) organization on HuggingFace and are logged in (i.e., `HF_TOKEN` is set in your environment). 
 
 ```bash
 # Install the package
-uv tool install git+https://github.com/OpenEuroLLM/multi-cluster-eval.git
+uv tool install git+https://github.com/OpenEuroLLM/oellm-cli.git
 
 # Run evaluations on multiple models and tasks
 oellm schedule-eval \
@@ -25,28 +33,30 @@ This will automatically:
 - Generate a SLURM job array to evaluate all model-task combinations
 - Submit the jobs with appropriate cluster-specific resource allocations
 
+In case you meet HuggingFace quotas issues, make sure you are logged in by setting your `HF_TOKEN` and that you are part of [OpenEuroLLM](https://huggingface.co/OpenEuroLLM) organization. 
+
 
 ## Installation
 
 ### JURECA/JSC Specifics
 
-Due to the limit space in $HOME on JSC clusters, you must set these `uv` specific environment variables to avoid running out of space:
+Due to the limit space in `$HOME` on JSC clusters, you must set these `uv` specific environment variables to avoid running out of space:
 
 ```bash
-export UV_CACHE_DIR="<some-workspace-dir>/.cache"
+export UV_CACHE_DIR="<some-workspace-dir>/.cache/uv-cache"
 export UV_INSTALL_DIR="<some-workspace>/.local"
 export UV_PYTHON_INSTALL_DIR="<some-workspace>/.local/share/uv/python"
-export UV_TOOL_DIR="<some-workspace-dir>/.cache"
+export UV_TOOL_DIR="<some-workspace-dir>/.cache/uv-tool-cache"
 ```
 
 You can set these variables in your `.bashrc` or `.zshrc` file, depending on your shell of preference.
 
 E.g., I have a user-folder in the `synthlaion` project, so I set the following variables:
 ```bash
-export UV_CACHE_DIR="/p/project1/synthlaion/$USER/.cache"
+export UV_CACHE_DIR="/p/project1/synthlaion/$USER/.cache/uv-cache"
 export UV_INSTALL_DIR="/p/project1/synthlaion/$USER/.local"
 export UV_PYTHON_INSTALL_DIR="/p/project1/synthlaion/$USER/.local/share/uv/python"
-export UV_TOOL_DIR="/p/project1/synthlaion/$USER/.cache"
+export UV_TOOL_DIR="/p/project1/synthlaion/$USER/.cache/uv-tool-cache"
 ```
 
 ### General Installation
@@ -54,7 +64,7 @@ export UV_TOOL_DIR="/p/project1/synthlaion/$USER/.cache"
 Install directly from the git repository using uv:
 
 ```bash
-uv tool install git+https://github.com/OpenEuroLLM/multi-cluster-eval.git
+uv tool install git+https://github.com/OpenEuroLLM/oellm-cli.git
 ```
 
 This makes the `oellm` command available globally in your shell.
@@ -66,7 +76,7 @@ uv tool upgrade oellm
 
 If you had previously installed the package from a different source and would like to overwrite it, you can run the following command:
 ```bash
-uv tool install git+https://github.com/OpenEuroLLM/multi-cluster-eval.git --force
+uv tool install git+https://github.com/OpenEuroLLM/oellm-cli.git --force
 ```
 
 ## High-Level Evaluation Workflow
@@ -75,7 +85,7 @@ The `oellm` package orchestrates distributed LLM evaluations through the followi
 
 ### 1. **Cluster Auto-Detection**
 - Automatically detects the current HPC cluster based on hostname patterns
-- Loads cluster-specific configurations from `clusters.yaml` including:
+- Loads cluster-specific configurations from [`clusters.yaml`](oellm/clusters.yaml) including:
   - SLURM partition and account settings
   - Shared storage paths for models, datasets, and results
   - GPU allocation and queue limits
