@@ -153,16 +153,9 @@ def _expand_local_model_paths(model: str) -> list[Path]:
     """
     model_paths = []
     if Path(model).exists() and Path(model).is_dir():
-        # could either be the direct path to a local model checkpoint dir or a directory that contains a lot of
-        # intermediate checkpoints from training of the structure: `model_name/hf/iter_1`, `model_name/hf/iter_2` ...
-        # or `model_name/iter_1`, `model_name/iter_2` ...
-        # The base case is that `model_name` is a directory that contains the model in a HF checkpoint format
-
-        # Basecase: check if the directory contains a `.safetensors` file
         if any(Path(model).glob("*.safetensors")):
             model_paths.append(Path(model))
 
-        # check if dir contains subdirs that themselves contain a `.safetensors` file
         model_path_base = (
             Path(model) / "hf" if "hf" not in Path(model).name else Path(model)
         )
@@ -508,7 +501,7 @@ def schedule_evals(
     time_limit = f"{hours_with_margin:02d}:00:00"
 
     # Log the calculated values
-    logging.info(f"📊 Evaluation planning:")
+    logging.info("📊 Evaluation planning:")
     logging.info(f"   Total evaluations: {total_evals}")
     logging.info(f"   Estimated time per eval: {minutes_per_eval} minutes")
     logging.info(
@@ -610,16 +603,9 @@ def build_csv(
     """
     _setup_logging(verbose)
 
-    try:
-        from oellm.interactive_csv_builder import build_csv_interactive
+    from oellm.interactive_csv_builder import build_csv_interactive
 
-        build_csv_interactive(output_path)
-    except ImportError:
-        console = Console()
-        console.print(
-            "[red]Interactive CSV builder requires questionary. Install with: pip install questionary[/red]"
-        )
-        return
+    build_csv_interactive(output_path)
 
 
 def collect_results(
@@ -627,6 +613,7 @@ def collect_results(
     output_csv: str = "eval_results.csv",
     *,
     check: bool = False,
+    reschedule: bool = False,
     verbose: bool = False,
 ) -> None:
     """
@@ -636,11 +623,15 @@ def collect_results(
         results_dir: Path to the directory containing result JSON files
         output_csv: Output CSV filename (default: eval_results.csv)
         check: Check for crashed or pending evaluations
+        reschedule: Show overview table and prompt to reschedule failed/pending jobs
         verbose: Enable verbose logging
     """
     import json
+    from rich.table import Table
+    from rich.panel import Panel
 
     _setup_logging(verbose)
+    console = Console()
 
     results_path = Path(results_dir)
     if not results_path.exists():
@@ -661,12 +652,13 @@ def collect_results(
 
     logging.info(f"Found {len(json_files)} result files")
 
-    # If check mode, also load the jobs.csv to compare
-    if check:
+    # If check or reschedule mode, also load the jobs.csv to compare
+    if check or reschedule:
         jobs_csv_path = results_path / "jobs.csv"
         if not jobs_csv_path.exists():
             logging.warning(f"No jobs.csv found in {results_dir}, cannot perform check")
             check = False
+            reschedule = False
         else:
             jobs_df = pd.read_csv(jobs_csv_path)
             logging.info(f"Found {len(jobs_df)} scheduled jobs in jobs.csv")
@@ -717,8 +709,8 @@ def collect_results(
                 if performance is not None:
                     results_with_performance += 1
 
-                    # Track completed job for check mode (only if we have a result)
-                    if check:
+                    # Track completed job for check/reschedule mode (only if we have a result)
+                    if check or reschedule:
                         completed_jobs.add((model_name, task_name, n_shot))
 
                     rows.append(
@@ -762,7 +754,7 @@ def collect_results(
             )
 
     # Perform check analysis if requested
-    if check:
+    if check or reschedule:
         logging.info("\n=== Evaluation Status Check ===")
 
         # Parse SLURM logs to get more detailed status
@@ -915,38 +907,157 @@ def collect_results(
                 )
 
         if len(needs_rerun_jobs) > 0:
-            # Save jobs that need rescheduling
-            rerun_csv = output_csv.replace(".csv", "_needs_rerun.csv")
-            needs_rerun_df.to_csv(rerun_csv, index=False)
-            logging.info(f"\nJobs needing reschedule saved to: {rerun_csv}")
-            logging.info(
-                "You can re-run these with: oellm schedule-eval --eval_csv_path "
-                + rerun_csv
-            )
+            if reschedule:
+                # Show overview table in reschedule mode
+                console.print("\n[bold cyan]🔄 Jobs Needing Reschedule[/bold cyan]")
 
-            # Save crashed jobs separately if any
-            if crashed_jobs:
-                crashed_csv = output_csv.replace(".csv", "_crashed.csv")
-                pd.DataFrame(crashed_jobs).to_csv(crashed_csv, index=False)
-                logging.info(f"Crashed jobs specifically saved to: {crashed_csv}")
+                # Create summary table
+                summary_table = Table(
+                    show_header=True, header_style="bold magenta", box="ROUNDED"
+                )
+                summary_table.add_column("Status", style="bold")
+                summary_table.add_column("Count", justify="right", style="cyan")
 
-            # Show some examples if verbose
-            if verbose and len(needs_rerun_jobs) > 0:
-                logging.info("\nExample jobs needing reschedule:")
-                for _i, (_, job) in enumerate(needs_rerun_df.head(5).iterrows()):
+                summary_table.add_row("✅ Completed", str(actual_completed_from_jobs))
+                summary_table.add_row("🏃 Still Running", str(len(still_running_jobs)))
+                summary_table.add_row("❌ Crashed", str(len(crashed_jobs)))
+                summary_table.add_row(
+                    "⏭️  Never Attempted", str(len(never_attempted_jobs))
+                )
+                summary_table.add_row(
+                    "[bold yellow]🔄 Need Reschedule[/bold yellow]",
+                    f"[bold yellow]{len(needs_rerun_jobs)}[/bold yellow]",
+                )
+
+                console.print(summary_table)
+
+                # Show detailed table of jobs to reschedule
+                console.print("\n[bold cyan]📋 Detailed Job List[/bold cyan]")
+
+                detail_table = Table(
+                    show_header=True, header_style="bold magenta", box="ROUNDED"
+                )
+                detail_table.add_column("#", style="dim", width=4)
+                detail_table.add_column("Status", style="bold", width=15)
+                detail_table.add_column(
+                    "Model", style="cyan", no_wrap=True, max_width=40
+                )
+                detail_table.add_column("Task", style="green", max_width=20)
+                detail_table.add_column("n_shot", justify="right", style="yellow")
+
+                # Show first 20 rows
+                for idx, (_, job) in enumerate(needs_rerun_df.head(20).iterrows(), 1):
                     if (
                         job["model_path"],
                         job["task_path"],
                         job["n_shot"],
                     ) in failed_jobs:
-                        status = "CRASHED"
+                        status = "[red]❌ CRASHED[/red]"
                     else:
-                        status = "NEVER ATTEMPTED"
-                    logging.info(
-                        f"  - [{status}] {job['model_path']} | {job['task_path']} | n_shot={job['n_shot']}"
+                        status = "[yellow]⏭️  NOT ATTEMPTED[/yellow]"
+
+                    # Truncate long model paths for display
+                    model_display = str(job["model_path"])
+                    if len(model_display) > 40:
+                        model_display = "..." + model_display[-37:]
+
+                    detail_table.add_row(
+                        str(idx),
+                        status,
+                        model_display,
+                        str(job["task_path"]),
+                        str(job["n_shot"]),
                     )
-                if len(needs_rerun_jobs) > 5:
-                    logging.info(f"  ... and {len(needs_rerun_jobs) - 5} more")
+
+                if len(needs_rerun_jobs) > 20:
+                    detail_table.add_row("...", "...", "...", "...", "...")
+                    console.print(detail_table)
+                    console.print(
+                        f"\n[dim]Showing 20 of {len(needs_rerun_jobs)} jobs[/dim]"
+                    )
+                else:
+                    console.print(detail_table)
+
+                # Ask for confirmation
+                console.print(
+                    f"\n[bold]Total jobs to reschedule: {len(needs_rerun_jobs)}[/bold]"
+                )
+
+                import questionary
+                from questionary import Style
+
+                custom_style = Style(
+                    [
+                        ("qmark", "fg:#673ab7 bold"),
+                        ("question", "bold"),
+                        ("answer", "fg:#f44336 bold"),
+                        ("pointer", "fg:#673ab7 bold"),
+                        ("highlighted", "fg:#673ab7 bold"),
+                        ("selected", "fg:#cc5454"),
+                    ]
+                )
+
+                save_and_schedule = questionary.confirm(
+                    "\nSave failed jobs CSV and schedule re-evaluation?",
+                    default=True,
+                    style=custom_style,
+                ).ask()
+
+                if save_and_schedule:
+                    # Save the CSV
+                    rerun_csv = output_csv.replace(".csv", "_needs_rerun.csv")
+                    needs_rerun_df.to_csv(rerun_csv, index=False)
+                    console.print(f"\n[green]✅ Jobs saved to: {rerun_csv}[/green]")
+
+                    # Ask if they want to schedule now
+                    schedule_now = questionary.confirm(
+                        "\nSchedule these jobs now?",
+                        default=True,
+                        style=custom_style,
+                    ).ask()
+
+                    if schedule_now:
+                        console.print(
+                            "\n[yellow]To schedule these jobs, run:[/yellow]"
+                        )
+                        console.print(
+                            f"[bold cyan]oellm schedule-eval --eval_csv_path {rerun_csv}[/bold cyan]"
+                        )
+
+            else:
+                # Original behavior for check mode
+                # Save jobs that need rescheduling
+                rerun_csv = output_csv.replace(".csv", "_needs_rerun.csv")
+                needs_rerun_df.to_csv(rerun_csv, index=False)
+                logging.info(f"\nJobs needing reschedule saved to: {rerun_csv}")
+                logging.info(
+                    "You can re-run these with: oellm schedule-eval --eval_csv_path "
+                    + rerun_csv
+                )
+
+                # Save crashed jobs separately if any
+                if crashed_jobs:
+                    crashed_csv = output_csv.replace(".csv", "_crashed.csv")
+                    pd.DataFrame(crashed_jobs).to_csv(crashed_csv, index=False)
+                    logging.info(f"Crashed jobs specifically saved to: {crashed_csv}")
+
+                # Show some examples if verbose
+                if verbose and len(needs_rerun_jobs) > 0:
+                    logging.info("\nExample jobs needing reschedule:")
+                    for _i, (_, job) in enumerate(needs_rerun_df.head(5).iterrows()):
+                        if (
+                            job["model_path"],
+                            job["task_path"],
+                            job["n_shot"],
+                        ) in failed_jobs:
+                            status = "CRASHED"
+                        else:
+                            status = "NEVER ATTEMPTED"
+                        logging.info(
+                            f"  - [{status}] {job['model_path']} | {job['task_path']} | n_shot={job['n_shot']}"
+                        )
+                    if len(needs_rerun_jobs) > 5:
+                        logging.info(f"  ... and {len(needs_rerun_jobs) - 5} more")
 
         if still_running_jobs and verbose:
             logging.info(
