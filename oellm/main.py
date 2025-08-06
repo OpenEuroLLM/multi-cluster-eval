@@ -262,6 +262,7 @@ def _calculate_task_minutes(
         "xcopa": 6,  # Cross-lingual COPA
         "xstory_cloze": 6,  # Cross-lingual story cloze
         "paws-x": 6,  # Cross-lingual paraphrase detection
+        "hellaswag": 20,  # Hellaswag task, needs 20 minutes per subtask
     }
 
     # Use task-specific timing if available, otherwise use default
@@ -563,6 +564,9 @@ def schedule_evals(
     # Add 20% safety margin and round up to nearest hour
     minutes_with_margin = int(minutes_per_job * 1.2)
     hours_with_margin = max(1, int(np.ceil(minutes_with_margin / 60)))
+
+    # Apply 3-hour safety minimum for array jobs
+    hours_with_margin = max(hours_with_margin, 3)
 
     # Cap at 24 hours
     hours_with_margin = min(hours_with_margin, 24)
