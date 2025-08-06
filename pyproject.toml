@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pandas",
-    "jsonargparse",
+    "jsonargparse[all]",
     "datasets<4.0.0",
     "rich",
     "torch",

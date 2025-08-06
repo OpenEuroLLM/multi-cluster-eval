@@ -235,13 +235,10 @@ def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
     return processed_model_paths
 
 
-def _count_task_subtasks(task_name: str, task_manager=None) -> int:
-    from lm_eval.tasks import TaskManager  # type: ignore
+def _count_task_subtasks(task_name: str, task_manager) -> int:
     from lm_eval.evaluator_utils import get_subtask_list  # type: ignore
 
-    tm = task_manager if task_manager is not None else TaskManager()
-    task_objects = tm.load_task_or_group(task_name)
-
+    task_objects = task_manager.load_task_or_group(task_name)
     subtask_dict = get_subtask_list(task_objects)
 
     total_subtasks = 0
@@ -252,7 +249,7 @@ def _count_task_subtasks(task_name: str, task_manager=None) -> int:
 
 
 def _calculate_task_minutes(
-    task_name: str, base_minutes_per_subtask: int = 5, task_manager=None
+    task_name: str, task_manager, base_minutes_per_subtask: int = 5
 ) -> int:
     """Calculate estimated minutes for a task based on its subtask count."""
     subtask_count = _count_task_subtasks(task_name, task_manager)
@@ -527,19 +524,15 @@ def schedule_evals(
         for _, row in df.iterrows():
             task_name = row["task_path"]
             if task_name not in task_time_cache:
-                if shared_task_manager is not None:
-                    task_time_cache[task_name] = _calculate_task_minutes(
-                        task_name, task_manager=shared_task_manager
-                    )
-                else:
-                    # Fallback to fixed timing if TaskManager unavailable
-                    task_time_cache[task_name] = 10
+                task_time_cache[task_name] = _calculate_task_minutes(
+                    task_name, task_manager=shared_task_manager
+                )
             total_minutes += task_time_cache[task_name]
 
         # Calculate average minutes per eval for logging purposes
         minutes_per_eval = total_minutes / total_evals if total_evals > 0 else 10
 
-        logging.info(f"📊 Dynamic time calculation:")
+        logging.info("📊 Dynamic time calculation:")
         for task_name, task_minutes in task_time_cache.items():
             task_count = (df["task_path"] == task_name).sum()
             logging.info(
@@ -1146,18 +1139,9 @@ def collect_results(
 def main():
     auto_cli(
         {
-            "schedule-eval": {
-                "_help": "Schedule evaluation jobs for models and tasks",
-                "schedule-eval": schedule_evals,
-            },
-            "build-csv": {
-                "_help": "Build a CSV file for evaluation with interactive builder",
-                "build-csv": build_csv,
-            },
-            "collect-results": {
-                "_help": "Collect evaluation results from JSON files and export to CSV",
-                "collect-results": collect_results,
-            },
+            "schedule-eval": schedule_evals,
+            "build-csv": build_csv,
+            "collect-results": collect_results,
         },
         as_positional=False,
         description="OELLM: Multi-cluster evaluation tool for language models",

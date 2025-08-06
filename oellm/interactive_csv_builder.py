@@ -19,6 +19,7 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
         output_path: Path where the CSV file will be saved.
     """
     console = Console()
+
     # Set up signal handler for graceful exit
     def signal_handler(sig, frame):
         console.print("\n\n[yellow]Interrupted by user. Exiting...[/yellow]")
