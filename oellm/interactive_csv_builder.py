@@ -2,19 +2,16 @@
 
 import signal
 import sys
-import pandas as pd
 from pathlib import Path
+
+import pandas as pd
+import questionary
+from questionary import Style
+from rich import box
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
-
-try:
-    import questionary
-    from questionary import Style
-    HAS_QUESTIONARY = True
-except ImportError:
-    HAS_QUESTIONARY = False
+from rich.table import Table
 
 
 def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
@@ -26,9 +23,6 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
     """
     console = Console()
     
-    if not HAS_QUESTIONARY:
-        console.print("[yellow]questionary not installed. Install with: pip install questionary[/yellow]")
-        return
     
     # Set up signal handler for graceful exit
     def signal_handler(sig, frame):
@@ -161,35 +155,14 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
             return
         
         if action == "➕ Add a task":
-            # Popular task suggestions
-            task_choice = questionary.select(
-                "Select a task or enter custom:",
-                choices=[
-                    "arc_challenge",
-                    "hellaswag",
-                    "mmlu",
-                    "truthfulqa_mc2",
-                    "winogrande",
-                    "gsm8k",
-                    "📝 Custom task"
-                ],
+            # Direct task input
+            task = questionary.text(
+                "Enter task name:",
                 style=custom_style
             ).ask()
-            
-            if task_choice is None:
+            if task is None:
                 console.print("\n[yellow]Cancelled by user.[/yellow]")
                 return
-            
-            if task_choice == "📝 Custom task":
-                task = questionary.text(
-                    "Enter task name:",
-                    style=custom_style
-                ).ask()
-                if task is None:
-                    console.print("\n[yellow]Cancelled by user.[/yellow]")
-                    return
-            else:
-                task = task_choice
             
             if task:
                 # Get n_shot values
@@ -263,7 +236,7 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
     # Show preview
     console.print("\n[bold cyan]👁️  Preview[/bold cyan]")
     
-    table = Table(show_header=True, header_style="bold magenta", box="ROUNDED")
+    table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
     table.add_column("#", style="dim", width=4)
     table.add_column("Model", style="cyan", no_wrap=True)
     table.add_column("Task", style="green")
@@ -319,6 +292,6 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
         console.print(f"\n[green]✅ Configuration saved to {output_path}[/green]")
         console.print(f"\n[bold]Next steps:[/bold]")
         console.print(f"  1. Review the configuration: [cyan]cat {output_path}[/cyan]")
-        console.print(f"  2. Run evaluation: [cyan]oellm schedule-eval --eval-csv-path {output_path}[/cyan]")
+        console.print(f"  2. Run evaluation: [cyan]oellm schedule-eval --eval_csv_path {output_path}[/cyan]")
     else:
         console.print("\n[yellow]Configuration not saved.[/yellow]")

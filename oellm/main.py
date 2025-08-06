@@ -13,6 +13,7 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 import yaml
+
 # Heavy imports moved to where they're needed
 from jsonargparse import auto_cli
 from rich.console import Console
@@ -22,7 +23,7 @@ from rich.logging import RichHandler
 def ensure_singularity_image(image_name: str) -> None:
     # TODO: switch to OELLM dataset repo once it is created
     from huggingface_hub import hf_hub_download
-    
+
     hf_repo = os.environ.get("HF_SIF_REPO", "timurcarstensen/testing")
     image_path = Path(os.getenv("EVAL_BASE_DIR")) / image_name
 
@@ -181,7 +182,7 @@ def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
     This function expands directory paths that contain multiple checkpoints.
     """
     from huggingface_hub import snapshot_download
-    
+
     processed_model_paths = {}
     model_paths = []
     for model in models:
@@ -244,18 +245,67 @@ def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
     return processed_model_paths
 
 
+def _count_task_subtasks(task_name: str, task_manager=None) -> int:
+    from lm_eval.tasks import TaskManager  # type: ignore
+    from lm_eval.evaluator_utils import get_subtask_list  # type: ignore
+
+    tm = task_manager if task_manager is not None else TaskManager()
+    task_objects = tm.load_task_or_group(task_name)
+
+    subtask_dict = get_subtask_list(task_objects)
+
+    total_subtasks = 0
+    for _, subtask_list in subtask_dict.items():
+        total_subtasks += len(subtask_list)
+
+    return max(1, total_subtasks)  # At least 1 subtask
+
+
+def _calculate_task_minutes(
+    task_name: str, base_minutes_per_subtask: int = 5, task_manager=None
+) -> int:
+    """Calculate estimated minutes for a task based on its subtask count."""
+    subtask_count = _count_task_subtasks(task_name, task_manager)
+
+    # Special handling for known multi-language tasks that take longer per subtask
+    known_complex_tasks = {
+        "belebele": 8,  # Multi-language reading comprehension, slower per subtask
+        "flores": 6,  # Translation task, moderately complex
+        "xnli": 6,  # Cross-lingual NLI
+        "xcopa": 6,  # Cross-lingual COPA
+        "xstory_cloze": 6,  # Cross-lingual story cloze
+        "paws-x": 6,  # Cross-lingual paraphrase detection
+    }
+
+    # Use task-specific timing if available, otherwise use default
+    minutes_per_subtask = known_complex_tasks.get(
+        task_name.lower(), base_minutes_per_subtask
+    )
+
+    # Calculate total time: (subtasks × time_per_subtask) + base_overhead
+    base_overhead = 3  # Base overhead for task setup/teardown
+    total_minutes = max(10, (subtask_count * minutes_per_subtask) + base_overhead)
+
+    # Log for complex tasks (>5 subtasks) or any known complex task
+    if subtask_count > 5 or task_name.lower() in known_complex_tasks:
+        complexity_note = (
+            f" (known complex task, {minutes_per_subtask} min/subtask)"
+            if task_name.lower() in known_complex_tasks
+            else ""
+        )
+        logging.info(
+            f"📊 Task '{task_name}' has {subtask_count} subtasks{complexity_note}, "
+            f"estimated time: {total_minutes} minutes ({total_minutes / 60:.1f} hours)"
+        )
+
+    return total_minutes
+
+
 def _pre_download_task_datasets(tasks: Iterable[str]) -> None:
     """Ensure that all datasets required by the given `tasks` are present in the local 🤗 cache at $HF_HOME."""
 
-    try:
-        from datasets import DownloadMode  # type: ignore
-        from lm_eval.tasks import TaskManager  # type: ignore
-    except Exception as import_err:
-        logging.warning(
-            "Could not import TaskManager from lm_eval.tasks – skipping dataset pre-download.\n%s",
-            import_err,
-        )
-        return
+    from datasets import DownloadMode  # type: ignore
+    from lm_eval.tasks import TaskManager  # type: ignore
 
     processed: set[str] = set()
 
@@ -266,39 +316,30 @@ def _pre_download_task_datasets(tasks: Iterable[str]) -> None:
             continue
         processed.add(task_name)
 
-        try:
-            logging.info(
-                f"Preparing dataset for task '{task_name}' (download if not cached)…"
-            )
+        logging.info(
+            f"Preparing dataset for task '{task_name}' (download if not cached)…"
+        )
 
-            # Instantiating the task downloads the dataset (or reuses cache)
-            task_objects = tm.load_task_or_group(task_name)
+        # Instantiating the task downloads the dataset (or reuses cache)
+        task_objects = tm.load_task_or_group(task_name)
 
-            # Some entries might be nested dictionaries (e.g., groups)
-            stack = [task_objects]
-            while stack:
-                current = stack.pop()
-                if isinstance(current, dict):
-                    stack.extend(current.values())
-                    continue
-                if hasattr(current, "download") and callable(current.download):
-                    try:
-                        current.download(
-                            download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS
-                        )  # type: ignore[arg-type]
-                    except TypeError as e:
-                        logging.error(
-                            f"Failed to download dataset for task '{task_name}' with download_mode=REUSE_DATASET_IF_EXISTS: {e}"
-                        )
-                        current.download()  # type: ignore[misc]
+        # Some entries might be nested dictionaries (e.g., groups)
+        stack = [task_objects]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, dict):
+                stack.extend(current.values())
+                continue
+            if hasattr(current, "download") and callable(current.download):
+                try:
+                    current.download(download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS)  # type: ignore[arg-type]
+                except TypeError as e:
+                    logging.error(
+                        f"Failed to download dataset for task '{task_name}' with download_mode=REUSE_DATASET_IF_EXISTS: {e}"
+                    )
+                    current.download()  # type: ignore[misc]
 
-            logging.debug(f"Finished dataset preparation for task '{task_name}'.")
-        except Exception as e:
-            logging.warning(
-                "Failed to pre-download dataset for task '%s'. The evaluation job might fail on the compute node.\n%s",
-                task_name,
-                e,
-            )
+        logging.debug(f"Finished dataset preparation for task '{task_name}'.")
 
 
 def schedule_evals(
@@ -377,7 +418,7 @@ def schedule_evals(
                 # Keep original path (might be HF model)
                 expanded_rows.append(row)
         df = pd.DataFrame(expanded_rows)
-        
+
         # Download HF models only if skip_checks is False
         if not skip_checks:
             # Process any HF models that need downloading
@@ -390,14 +431,12 @@ def schedule_evals(
                         # This shouldn't expand further, just update the path
                         df.at[idx, "model_path"] = model_path_map[row["model_path"]][0]
         else:
-            logging.info(
-                "Skipping HuggingFace model downloads (--skip-checks enabled)"
-            )
+            logging.info("Skipping HuggingFace model downloads (--skip-checks enabled)")
 
     elif models and tasks and n_shot is not None:
         model_list = models.split(",")
         model_paths = []
-        
+
         # Always expand local paths
         for model in model_list:
             local_paths = _expand_local_model_paths(model)
@@ -405,7 +444,7 @@ def schedule_evals(
                 model_paths.extend(local_paths)
             else:
                 model_paths.append(model)
-        
+
         # Download HF models only if skip_checks is False
         if not skip_checks:
             hf_models = [m for m in model_paths if not Path(m).exists()]
@@ -417,9 +456,7 @@ def schedule_evals(
                     for m in model_paths
                 ]
         else:
-            logging.info(
-                "Skipping HuggingFace model downloads (--skip-checks enabled)"
-            )
+            logging.info("Skipping HuggingFace model downloads (--skip-checks enabled)")
 
         tasks_list = tasks.split(",")
 
@@ -482,42 +519,85 @@ def schedule_evals(
 
     # Calculate dynamic array size and time limits
     total_evals = len(df)
-    minutes_per_eval = 10  # Budget 10 minutes per eval
-    total_minutes = total_evals * minutes_per_eval
-    
+
+    # Calculate time based on actual task complexity (subtask count)
+    if not skip_checks:
+        from lm_eval.tasks import TaskManager  # type: ignore
+
+        shared_task_manager = TaskManager()
+
+        # Calculate total minutes by considering each unique task's complexity
+        total_minutes = 0
+        task_time_cache = {}  # Cache to avoid recalculating for same tasks
+
+        for _, row in df.iterrows():
+            task_name = row["task_path"]
+            if task_name not in task_time_cache:
+                if shared_task_manager is not None:
+                    task_time_cache[task_name] = _calculate_task_minutes(
+                        task_name, task_manager=shared_task_manager
+                    )
+                else:
+                    # Fallback to fixed timing if TaskManager unavailable
+                    task_time_cache[task_name] = 10
+            total_minutes += task_time_cache[task_name]
+
+        # Calculate average minutes per eval for logging purposes
+        minutes_per_eval = total_minutes / total_evals if total_evals > 0 else 10
+
+        logging.info(f"📊 Dynamic time calculation:")
+        for task_name, task_minutes in task_time_cache.items():
+            task_count = (df["task_path"] == task_name).sum()
+            logging.info(
+                f"   Task '{task_name}': {task_minutes} min/eval × {task_count} evals = {task_minutes * task_count} total minutes"
+            )
+    else:
+        # Fallback to fixed timing when checks are skipped
+        minutes_per_eval = 10  # Budget 10 minutes per eval
+        total_minutes = total_evals * minutes_per_eval
+        logging.info(
+            "⚠️  Using fixed 10 min/eval (task complexity detection skipped with --skip-checks)"
+        )
+
     # Maximum runtime per job (18 hours with safety margin)
     max_minutes_per_job = 18 * 60  # 18 hours
     min_array_size_for_time = max(1, int(np.ceil(total_minutes / max_minutes_per_job)))
     desired_array_size = min(128, total_evals) if total_evals >= 128 else total_evals
     if desired_array_size < min_array_size_for_time:
         desired_array_size = min_array_size_for_time
-    
+
     # The actual array size is limited by queue capacity and total evals
     actual_array_size = min(remaining_queue_capacity, desired_array_size, total_evals)
-    
+
     # Calculate actual time per job
     evals_per_job = max(1, int(np.ceil(total_evals / actual_array_size)))
     minutes_per_job = evals_per_job * minutes_per_eval
-    
+
     # Add 20% safety margin and round up to nearest hour
     minutes_with_margin = int(minutes_per_job * 1.2)
     hours_with_margin = max(1, int(np.ceil(minutes_with_margin / 60)))
-    
+
     # Cap at 24 hours
     hours_with_margin = min(hours_with_margin, 24)
-    
+
     # Format time limit for SLURM (HH:MM:SS)
     time_limit = f"{hours_with_margin:02d}:00:00"
-    
+
     # Log the calculated values
     logging.info(f"📊 Evaluation planning:")
     logging.info(f"   Total evaluations: {total_evals}")
     logging.info(f"   Estimated time per eval: {minutes_per_eval} minutes")
-    logging.info(f"   Total estimated time: {total_minutes} minutes ({total_minutes/60:.1f} hours)")
+    logging.info(
+        f"   Total estimated time: {total_minutes} minutes ({total_minutes / 60:.1f} hours)"
+    )
     logging.info(f"   Desired array size: {desired_array_size}")
-    logging.info(f"   Actual array size: {actual_array_size} (limited by queue capacity: {remaining_queue_capacity})")
+    logging.info(
+        f"   Actual array size: {actual_array_size} (limited by queue capacity: {remaining_queue_capacity})"
+    )
     logging.info(f"   Evaluations per job: {evals_per_job}")
-    logging.info(f"   Time per job: {minutes_per_job} minutes ({minutes_per_job/60:.1f} hours)")
+    logging.info(
+        f"   Time per job: {minutes_per_job} minutes ({minutes_per_job / 60:.1f} hours)"
+    )
     logging.info(f"   Time limit with safety margin: {time_limit}")
 
     # replace the placeholders in the template with the actual values
@@ -614,16 +694,8 @@ def build_csv(
     """
     _setup_logging(verbose)
 
-    try:
-        from oellm.interactive_csv_builder import build_csv_interactive
-
-        build_csv_interactive(output_path)
-    except ImportError:
-        console = Console()
-        console.print(
-            "[red]Interactive CSV builder requires questionary. Install with: pip install questionary[/red]"
-        )
-        return
+    from oellm.interactive_csv_builder import build_csv_interactive
+    build_csv_interactive(output_path)
 
 
 def main():
