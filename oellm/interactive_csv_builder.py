@@ -169,32 +169,11 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
             return
 
         if action == "➕ Add a task":
-            # Popular task suggestions
-            task_choice = questionary.select(
-                "Select a task or enter custom:",
-                choices=[
-                    "arc_challenge",
-                    "hellaswag",
-                    "mmlu",
-                    "truthfulqa_mc2",
-                    "winogrande",
-                    "gsm8k",
-                    "📝 Custom task",
-                ],
-                style=custom_style,
-            ).ask()
-
-            if task_choice is None:
+            # Direct task input
+            task = questionary.text("Enter task name:", style=custom_style).ask()
+            if task is None:
                 console.print("\n[yellow]Cancelled by user.[/yellow]")
                 return
-
-            if task_choice == "📝 Custom task":
-                task = questionary.text("Enter task name:", style=custom_style).ask()
-                if task is None:
-                    console.print("\n[yellow]Cancelled by user.[/yellow]")
-                    return
-            else:
-                task = task_choice
 
             if task:
                 # Get n_shot values
