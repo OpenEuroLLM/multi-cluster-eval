@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from jsonargparse import auto_cli
+from rich import box
 from rich.console import Console
 from rich.logging import RichHandler
 
@@ -1027,7 +1028,7 @@ def collect_results(
 
                 # Create summary table
                 summary_table = Table(
-                    show_header=True, header_style="bold magenta", box="ROUNDED"
+                    show_header=True, header_style="bold magenta", box=box.ROUNDED
                 )
                 summary_table.add_column("Status", style="bold")
                 summary_table.add_column("Count", justify="right", style="cyan")
@@ -1049,7 +1050,7 @@ def collect_results(
                 console.print("\n[bold cyan]📋 Detailed Job List[/bold cyan]")
 
                 detail_table = Table(
-                    show_header=True, header_style="bold magenta", box="ROUNDED"
+                    show_header=True, header_style="bold magenta", box=box.ROUNDED
                 )
                 detail_table.add_column("#", style="dim", width=4)
                 detail_table.add_column("Status", style="bold", width=15)

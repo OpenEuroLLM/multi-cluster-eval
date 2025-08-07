@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import questionary
 from questionary import Style
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -268,7 +269,7 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
     # Show preview
     console.print("\n[bold cyan]👁️  Preview[/bold cyan]")
 
-    table = Table(show_header=True, header_style="bold magenta", box="ROUNDED")
+    table = Table(show_header=True, header_style="bold magenta", box=box.ROUNDED)
     table.add_column("#", style="dim", width=4)
     table.add_column("Model", style="cyan", no_wrap=True)
     table.add_column("Task", style="green")
