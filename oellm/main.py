@@ -149,19 +149,56 @@ def _num_jobs_in_queue() -> int:
 def _expand_local_model_paths(model: str) -> list[Path]:
     """
     Expands a local model path to include all checkpoints if it's a directory.
-    Returns empty list if not a local path.
+    Recursively searches for models in subdirectories.
+    
+    Args:
+        model: Path to a model or directory containing models
+    
+    Returns:
+        List of paths to model directories containing safetensors files
     """
     model_paths = []
-    if Path(model).exists() and Path(model).is_dir():
-        if any(Path(model).glob("*.safetensors")):
-            model_paths.append(Path(model))
-
-        model_path_base = (
-            Path(model) / "hf" if "hf" not in Path(model).name else Path(model)
-        )
-        for subdir in model_path_base.glob("*"):
+    model_path = Path(model)
+    
+    if not model_path.exists() or not model_path.is_dir():
+        return model_paths
+    
+    # First check if current directory contains safetensors files
+    if any(model_path.glob("*.safetensors")):
+        model_paths.append(model_path)
+        # If current dir has safetensors, don't recurse further
+        return model_paths
+    
+    # Check for hf subdirectory pattern (single model with checkpoints)
+    hf_path = model_path / "hf"
+    if hf_path.exists() and hf_path.is_dir():
+        # This is a single model with checkpoints in hf/iter_* structure
+        for subdir in hf_path.glob("*"):
             if subdir.is_dir() and any(subdir.glob("*.safetensors")):
                 model_paths.append(subdir)
+        if model_paths:
+            return model_paths
+    
+    # Check if subdirectories look like model directories
+    # (e.g., open-sci-ref_model-0.13b_data-c4_...)
+    subdirs = [d for d in model_path.iterdir() if d.is_dir()]
+    
+    # Process each subdirectory as a potential model
+    for subdir in subdirs:
+        # Check if this subdirectory directly contains safetensors
+        if any(subdir.glob("*.safetensors")):
+            model_paths.append(subdir)
+        else:
+            # Check for hf/iter_* pattern in this subdirectory
+            hf_subpath = subdir / "hf"
+            if hf_subpath.exists() and hf_subpath.is_dir():
+                for checkpoint_dir in hf_subpath.glob("*"):
+                    if checkpoint_dir.is_dir() and any(checkpoint_dir.glob("*.safetensors")):
+                        model_paths.append(checkpoint_dir)
+    
+    if len(model_paths) > 1:
+        logging.info(f"Expanded '{model}' to {len(model_paths)} model checkpoints")
+    
     return model_paths
 
 
@@ -349,9 +386,12 @@ def schedule_evals(
         models: A string of comma-separated model paths or Hugging Face model identifiers.
             Warning: does not allow passing model args such as `EleutherAI/pythia-160m,revision=step100000`
             since we split on commas. If you need to pass model args, use the `eval_csv_path` option.
-            For local paths, the path must either be a directory that contains a `.safetensors` file or a directory that contains a lot of
-            intermediate checkpoints from training of the structure: `model_name/hf/iter_XXXXX`. The function will expand the path to
-            include all the intermediate checkpoints and schedule jobs for each checkpoint.
+            For local paths:
+            - If a directory contains `.safetensors` files directly, it will be treated as a single model
+            - If a directory contains subdirectories with models (e.g., converted_checkpoints/), 
+              all models in subdirectories will be automatically discovered
+            - For each model directory, if it has an `hf/iter_XXXXX` structure, all checkpoints will be expanded
+            - This allows passing a single directory containing multiple models to evaluate them all
         tasks: A string of comma-separated task paths.
         n_shot: An integer or list of integers specifying the number of shots for each task.
         eval_csv_path: A path to a CSV file containing evaluation data.
