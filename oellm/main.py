@@ -1143,8 +1143,7 @@ def collect_results(
                 needs_rerun_df.to_csv(rerun_csv, index=False)
                 logging.info(f"\nJobs needing reschedule saved to: {rerun_csv}")
                 logging.info(
-                    "You can re-run these with: oellm schedule-eval --eval_csv_path "
-                    + rerun_csv
+                    f"You can re-run these with: [bold cyan]oellm schedule-eval --eval_csv_path {rerun_csv}[/bold cyan]"
                 )
 
                 # Save crashed jobs separately if any
