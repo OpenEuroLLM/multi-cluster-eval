@@ -151,25 +151,25 @@ def _expand_local_model_paths(model: str) -> list[Path]:
     """
     Expands a local model path to include all checkpoints if it's a directory.
     Recursively searches for models in subdirectories.
-    
+
     Args:
         model: Path to a model or directory containing models
-    
+
     Returns:
         List of paths to model directories containing safetensors files
     """
     model_paths = []
     model_path = Path(model)
-    
+
     if not model_path.exists() or not model_path.is_dir():
         return model_paths
-    
+
     # First check if current directory contains safetensors files
     if any(model_path.glob("*.safetensors")):
         model_paths.append(model_path)
         # If current dir has safetensors, don't recurse further
         return model_paths
-    
+
     # Check for hf subdirectory pattern (single model with checkpoints)
     hf_path = model_path / "hf"
     if hf_path.exists() and hf_path.is_dir():
@@ -179,11 +179,11 @@ def _expand_local_model_paths(model: str) -> list[Path]:
                 model_paths.append(subdir)
         if model_paths:
             return model_paths
-    
+
     # Check if subdirectories look like model directories
     # (e.g., open-sci-ref_model-0.13b_data-c4_...)
     subdirs = [d for d in model_path.iterdir() if d.is_dir()]
-    
+
     # Process each subdirectory as a potential model
     for subdir in subdirs:
         # Check if this subdirectory directly contains safetensors
@@ -194,12 +194,14 @@ def _expand_local_model_paths(model: str) -> list[Path]:
             hf_subpath = subdir / "hf"
             if hf_subpath.exists() and hf_subpath.is_dir():
                 for checkpoint_dir in hf_subpath.glob("*"):
-                    if checkpoint_dir.is_dir() and any(checkpoint_dir.glob("*.safetensors")):
+                    if checkpoint_dir.is_dir() and any(
+                        checkpoint_dir.glob("*.safetensors")
+                    ):
                         model_paths.append(checkpoint_dir)
-    
+
     if len(model_paths) > 1:
         logging.info(f"Expanded '{model}' to {len(model_paths)} model checkpoints")
-    
+
     return model_paths
 
 
@@ -389,7 +391,7 @@ def schedule_evals(
             since we split on commas. If you need to pass model args, use the `eval_csv_path` option.
             For local paths:
             - If a directory contains `.safetensors` files directly, it will be treated as a single model
-            - If a directory contains subdirectories with models (e.g., converted_checkpoints/), 
+            - If a directory contains subdirectories with models (e.g., converted_checkpoints/),
               all models in subdirectories will be automatically discovered
             - For each model directory, if it has an `hf/iter_XXXXX` structure, all checkpoints will be expanded
             - This allows passing a single directory containing multiple models to evaluate them all
@@ -545,7 +547,9 @@ def schedule_evals(
 
     # Shuffle the dataframe to distribute fast/slow evaluations evenly across array jobs
     df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-    logging.info("Shuffled evaluation jobs for even load distribution across array workers")
+    logging.info(
+        "Shuffled evaluation jobs for even load distribution across array workers"
+    )
 
     df.to_csv(csv_path, index=False)
 
