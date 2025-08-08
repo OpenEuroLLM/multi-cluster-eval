@@ -543,6 +543,10 @@ def schedule_evals(
     slurm_logs_dir.mkdir(parents=True, exist_ok=True)
     csv_path = evals_dir / "jobs.csv"
 
+    # Shuffle the dataframe to distribute fast/slow evaluations evenly across array jobs
+    df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+    logging.info("Shuffled evaluation jobs for even load distribution across array workers")
+
     df.to_csv(csv_path, index=False)
 
     logging.debug(f"Saved evaluation dataframe to temporary CSV: {csv_path}")
