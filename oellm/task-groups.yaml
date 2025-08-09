@@ -1,0 +1,52 @@
+# Default task groups for interactive CSV builder
+# Each group contains a list of tasks with their n_shot values
+# Format: task_name,n_shot1,n_shot2,...
+
+task_groups:
+  open-sci-default:
+    description: "Default OpenEuroLLM scientific tasks"
+    tasks:
+      - task: copa
+        n_shots: [0]
+      - task: mmlu
+        n_shots: [5]
+      - task: hellaswag
+        n_shots: [0]
+      - task: arc_easy
+        n_shots: [0, 5]
+      - task: arc_challenge
+        n_shots: [0, 5]
+      - task: winogrande
+        n_shots: [0]
+      - task: truthfulqa
+        n_shots: [0]
+      - task: gsm8k
+        n_shots: [5]
+      - task: boolq
+        n_shots: [0]
+      - task: lambada
+        n_shots: [0]
+
+  belebele-eu:
+    description: "Belebele European language tasks"
+    tasks:
+      - task: belebele_eng_Latn
+        n_shots: [0, 5]
+      - task: belebele_fra_Latn
+        n_shots: [0, 5]
+      - task: belebele_deu_Latn
+        n_shots: [0, 5]
+      - task: belebele_spa_Latn
+        n_shots: [0, 5]
+      - task: belebele_ita_Latn
+        n_shots: [0, 5]
+      - task: belebele_por_Latn
+        n_shots: [0, 5]
+      - task: belebele_nld_Latn
+        n_shots: [0, 5]
+      - task: belebele_pol_Latn
+        n_shots: [0, 5]
+      - task: belebele_ron_Latn
+        n_shots: [0, 5]
+      - task: belebele_swe_Latn
+        n_shots: [0, 5]
