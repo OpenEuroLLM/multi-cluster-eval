@@ -376,7 +376,7 @@ def schedule_evals(
     n_shot: int | list[int] | None = None,
     eval_csv_path: str | None = None,
     *,
-    max_array_len: int = 32,
+    max_array_len: int = 128,
     verbose: bool = False,
     download_only: bool = False,
     dry_run: bool = False,
