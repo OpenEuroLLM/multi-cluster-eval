@@ -3,10 +3,11 @@
 A package for running OELLM CLI workflows across multiple HPC clusters using SLURM job arrays and Singularity containers. 
 
 ## Currently supported workflows
--  Schedule evaluations on multiple models and tasks on all clusters ✅
+- Schedule evaluations on multiple models and tasks on all clusters ✅
+- Restart failed evaluations (e.g., due to node failures) ✅
+- Interactive eval job/csv builder ✅
 
 ## Planned workflows
-- Restart failed evaluations (e.g., due to node failures)
 - Sync and download evaluation results from all clusters via a shared data layer
 - Schedule training jobs on all clusters
 - Schedule conversions from MegatronLM to HuggingFace
