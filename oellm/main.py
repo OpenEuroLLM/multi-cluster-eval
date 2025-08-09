@@ -610,10 +610,10 @@ def schedule_evals(
     hours_with_margin = max(hours_with_margin, 3)
 
     # Cap at 24 hours
-    hours_with_margin = min(hours_with_margin, 24)
+    hours_with_margin = min(hours_with_margin, 23)
 
     # Format time limit for SLURM (HH:MM:SS)
-    time_limit = f"{hours_with_margin:02d}:00:00"
+    time_limit = f"{hours_with_margin:02d}:59:00"
 
     # Log the calculated values
     logging.info("📊 Evaluation planning:")

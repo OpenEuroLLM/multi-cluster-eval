@@ -300,7 +300,7 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
         console.print("\n[bold]Next steps:[/bold]")
         console.print(f"  1. Review the configuration: [cyan]cat {output_path}[/cyan]")
         console.print(
-            f"  2. Run evaluation: [cyan]oellm schedule-eval --eval-csv-path {output_path}[/cyan]"
+            f"  2. Run evaluation: [cyan]oellm schedule-eval --eval_csv_path {output_path}[/cyan]"
         )
     else:
         console.print("\n[yellow]Configuration not saved.[/yellow]")
