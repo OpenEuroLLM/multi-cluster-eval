@@ -93,7 +93,7 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
                 instruction="(e.g., meta-llama/Llama-2-7b-hf or /path/to/model)",
                 style=custom_style,
             ).ask()
-            
+
             if model is None:  # User pressed Ctrl+C
                 console.print("\n[yellow]Cancelled by user.[/yellow]")
                 return
