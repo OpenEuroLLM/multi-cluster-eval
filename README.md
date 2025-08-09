@@ -35,6 +35,22 @@ This will automatically:
 
 In case you meet HuggingFace quotas issues, make sure you are logged in by setting your `HF_TOKEN` and that you are part of [OpenEuroLLM](https://huggingface.co/OpenEuroLLM) organization. 
 
+## Interactive CSV Builder
+
+```bash
+oellm interactive-csv
+```
+
+This will launch an interactive workflow where you can:
+- Add models (HuggingFace Hub or local paths)
+- Select evaluation tasks
+- Configure n-shot settings
+- Preview and save your evaluation configuration
+
+Otherwise you can also directly schedule using a CSV file:
+```bash
+oellm schedule-eval --eval_csv_path custom_evals.csv
+```
 
 ## Installation
 
@@ -135,22 +151,7 @@ Each cluster has pre-configured:
 - Optimized Singularity containers with evaluation dependencies
 - Account and partition settings for the OpenEuroLLM project
 
-## Advanced Usage
-
-### Custom Evaluation Configurations
-For complex evaluations, create a CSV file with specific model arguments:
-
-```csv
-model_path,task_path,n_shot
-"EleutherAI/pythia-160m,revision=step100000,dtype=float16",hellaswag,0
-"/path/to/local/checkpoint",mmlu,5
-```
-
-```bash
-oellm schedule-eval --eval_csv_path custom_evals.csv
-```
-
-### Development and Testing
+## Development and Testing
 Run in download-only mode to prepare resources without submitting jobs:
 
 ```bash

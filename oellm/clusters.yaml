@@ -4,7 +4,7 @@ shared:
   PYTHON_PATH: "{EVAL_BASE_DIR}/.venv"
   HF_HOME: "{EVAL_BASE_DIR}/hf_data"  # where HuggingFace models and datasets are stored
   EVAL_OUTPUT_DIR: "{EVAL_BASE_DIR}/{USER}"  # where evaluations are written
-  GPUS_PER_NODE: 4
+  GPUS_PER_NODE: 1
 
 leonardo:
   hostname_pattern: "*.leonardo.local"  # use this regexp to automatically assign environment variables corresponding to this YAML
@@ -20,7 +20,7 @@ jureca:
   EVAL_BASE_DIR: "/p/data1/mmlaion/oellm_shared_evals"
   PARTITION: "dc-gpu"
   ACCOUNT: "synthlaion"
-  QUEUE_LIMIT: 512
+  QUEUE_LIMIT: 250
   EVAL_CONTAINER_IMAGE: "eval_env-jureca.sif"
   SINGULARITY_ARGS: "--nv"
 

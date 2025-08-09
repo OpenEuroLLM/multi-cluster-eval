@@ -11,3 +11,5 @@
 **/*.log
 **/*.out
 **/*.egg-info
+**/*.csv
+**/uv.lock
