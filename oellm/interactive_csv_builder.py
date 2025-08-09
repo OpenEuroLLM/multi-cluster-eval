@@ -88,43 +88,15 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
             return
 
         if action == "➕ Add a model":
-            model_input = questionary.select(
-                "How would you like to add models?",
-                choices=[
-                    "🤗 HuggingFace model (e.g., meta-llama/Llama-2-7b-hf)",
-                    "📁 Local path",
-                    "📝 Custom input",
-                ],
+            model = questionary.text(
+                "Enter model (HuggingFace ID or local path):",
+                instruction="(e.g., meta-llama/Llama-2-7b-hf or /path/to/model)",
                 style=custom_style,
             ).ask()
-
-            if model_input is None:  # User pressed Ctrl+C
+            
+            if model is None:  # User pressed Ctrl+C
                 console.print("\n[yellow]Cancelled by user.[/yellow]")
                 return
-
-            if "HuggingFace" in model_input:
-                model = questionary.text(
-                    "Enter HuggingFace model ID:",
-                    instruction="(e.g., meta-llama/Llama-2-7b-hf)",
-                    style=custom_style,
-                ).ask()
-                if model is None:
-                    console.print("\n[yellow]Cancelled by user.[/yellow]")
-                    return
-            elif "Local path" in model_input:
-                model = questionary.path(
-                    "Enter local model path:", only_directories=True, style=custom_style
-                ).ask()
-                if model is None:
-                    console.print("\n[yellow]Cancelled by user.[/yellow]")
-                    return
-            else:
-                model = questionary.text(
-                    "Enter model identifier:", style=custom_style
-                ).ask()
-                if model is None:
-                    console.print("\n[yellow]Cancelled by user.[/yellow]")
-                    return
 
             if model:
                 models.append(model)

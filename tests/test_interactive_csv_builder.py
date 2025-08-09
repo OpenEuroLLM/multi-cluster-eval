@@ -30,7 +30,6 @@ class TestInteractiveCSVBuilder:
         # Mock user interactions
         mock_select.return_value.ask.side_effect = [
             "➕ Add a model",  # Choose to add a model
-            "📝 Custom input",  # Choose custom input for model
             "✅ Continue to tasks",  # Continue to tasks
             "➕ Add a task",  # Add a task
             "0 (zero-shot)",  # Choose n_shot value
@@ -67,9 +66,7 @@ class TestInteractiveCSVBuilder:
         # Mock user interactions
         mock_select.return_value.ask.side_effect = [
             "➕ Add a model",
-            "📝 Custom input",
             "➕ Add a model",
-            "🤗 HuggingFace model (e.g., meta-llama/Llama-2-7b-hf)",
             "✅ Continue to tasks",
             "➕ Add a task",
             "0,5 (both)",  # Multiple n_shot values
@@ -115,7 +112,6 @@ class TestInteractiveCSVBuilder:
         """Test custom n_shot value input."""
         mock_select.return_value.ask.side_effect = [
             "➕ Add a model",
-            "📝 Custom input",
             "✅ Continue to tasks",
             "➕ Add a task",
             "📝 Custom values",  # Choose custom n_shot
@@ -137,24 +133,24 @@ class TestInteractiveCSVBuilder:
         assert set(df["n_shot"].unique()) == {0, 3, 7, 15}
 
     @patch("oellm.interactive_csv_builder.questionary.select")
-    @patch("oellm.interactive_csv_builder.questionary.path")
     @patch("oellm.interactive_csv_builder.questionary.text")
     @patch("oellm.interactive_csv_builder.questionary.confirm")
     def test_local_path_model(
-        self, mock_confirm, mock_text, mock_path, mock_select, temp_output_path
+        self, mock_confirm, mock_text, mock_select, temp_output_path
     ):
         """Test adding a model via local path."""
         mock_select.return_value.ask.side_effect = [
             "➕ Add a model",
-            "📁 Local path",  # Choose local path
             "✅ Continue to tasks",
             "➕ Add a task",
             "0 (zero-shot)",
             "✅ Continue to preview",
         ]
 
-        mock_path.return_value.ask.return_value = "/path/to/local/model"
-        mock_text.return_value.ask.return_value = "test-task"
+        mock_text.return_value.ask.side_effect = [
+            "/path/to/local/model",  # Enter local path as model
+            "test-task",  # Enter task name
+        ]
         mock_confirm.return_value.ask.return_value = True
 
         build_csv_interactive(temp_output_path)
@@ -186,7 +182,6 @@ class TestInteractiveCSVBuilder:
         """Test when user chooses not to save."""
         mock_select.return_value.ask.side_effect = [
             "➕ Add a model",
-            "📝 Custom input",
             "✅ Continue to tasks",
             "➕ Add a task",
             "0 (zero-shot)",
@@ -214,7 +209,6 @@ class TestInteractiveCSVBuilder:
         """Test handling of invalid n_shot values."""
         mock_select.return_value.ask.side_effect = [
             "➕ Add a model",
-            "📝 Custom input",
             "✅ Continue to tasks",
             "➕ Add a task",
             "📝 Custom values",
@@ -248,7 +242,6 @@ class TestInteractiveCSVBuilder:
         """Test viewing current models and tasks functionality."""
         mock_select.return_value.ask.side_effect = [
             "➕ Add a model",
-            "📝 Custom input",
             "📋 View current models",  # View models
             "✅ Continue to tasks",
             "➕ Add a task",
@@ -284,7 +277,6 @@ class TestInteractiveCSVBuilder:
             ) as mock_confirm:
                 mock_select.return_value.ask.side_effect = [
                     "➕ Add a model",
-                    "📝 Custom input",
                     "✅ Continue to tasks",
                     "➕ Add a task",
                     "0 (zero-shot)",
