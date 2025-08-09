@@ -1,5 +1,3 @@
-"""Unit tests for the interactive CSV builder."""
-
 import tempfile
 from pathlib import Path
 from unittest.mock import patch

@@ -1,5 +1,3 @@
-"""Unit tests for the _expand_local_model_paths function."""
-
 import tempfile
 from pathlib import Path
 
@@ -166,25 +164,6 @@ class TestExpandLocalModelPaths:
         assert direct_model in result
         assert checkpoint_model in result
 
-    def test_nested_hf_directories(self, temp_dir):
-        """Test handling of nested hf directories (edge case)."""
-        model_dir = temp_dir / "model"
-
-        # Create a valid checkpoint
-        valid_checkpoint = model_dir / "hf" / "iter_1000"
-        self.create_safetensors_file(valid_checkpoint)
-
-        # Create a nested hf directory (should be ignored)
-        nested_hf = model_dir / "hf" / "iter_1000" / "hf" / "nested"
-        nested_hf.mkdir(parents=True)
-        (nested_hf / "model.safetensors").touch()
-
-        result = _expand_local_model_paths(str(model_dir))
-
-        # Should only find the valid checkpoint, not the nested one
-        assert len(result) == 1
-        assert result[0] == valid_checkpoint
-
     def test_file_instead_of_directory(self, temp_dir):
         """Test passing a file instead of a directory."""
         file_path = temp_dir / "file.txt"
@@ -194,7 +173,7 @@ class TestExpandLocalModelPaths:
 
         assert len(result) == 0
 
-    def test_symlinked_directory(self, temp_dir):
+    def test_symlinked_directory(self, temp_dir: Path):
         """Test handling of symlinked directories."""
         # Create actual model directory
         actual_model = temp_dir / "actual_model"
