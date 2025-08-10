@@ -8,45 +8,73 @@ task_groups:
     tasks:
       - task: copa
         n_shots: [0]
+      - task: openbookqa
+        n_shots: [0]
+      - task: lambada_openai
+        n_shots: [0]
+      - task: winogrande
+        n_shots: [0]
       - task: mmlu
         n_shots: [5]
       - task: hellaswag
-        n_shots: [0]
+        n_shots: [10]
       - task: arc_easy
-        n_shots: [0, 5]
+        n_shots: [10]
       - task: arc_challenge
-        n_shots: [0, 5]
-      - task: winogrande
-        n_shots: [0]
-      - task: truthfulqa
-        n_shots: [0]
-      - task: gsm8k
-        n_shots: [5]
+        n_shots: [10]
+      - task: commonsense_qa
+        n_shots: [10]
+      - task: piqa
+        n_shots: [10]
       - task: boolq
-        n_shots: [0]
-      - task: lambada
-        n_shots: [0]
+        n_shots: [10]
 
   belebele-eu:
     description: "Belebele European language tasks"
     tasks:
+      - task: belebele_bul_Cyrl
+        n_shots: [0, 5]
+      - task: belebele_hrv_Latn
+        n_shots: [0, 5]
+      - task: belebele_ces_Latn
+        n_shots: [0, 5]
+      - task: belebele_dan_Latn
+        n_shots: [0, 5]
+      - task: belebele_nld_Latn
+        n_shots: [0, 5]
       - task: belebele_eng_Latn
+        n_shots: [0, 5]
+      - task: belebele_est_Latn
+        n_shots: [0, 5]
+      - task: belebele_fin_Latn
         n_shots: [0, 5]
       - task: belebele_fra_Latn
         n_shots: [0, 5]
       - task: belebele_deu_Latn
         n_shots: [0, 5]
-      - task: belebele_spa_Latn
+      - task: belebele_ell_Grek
+        n_shots: [0, 5]
+      - task: belebele_hun_Latn
         n_shots: [0, 5]
       - task: belebele_ita_Latn
         n_shots: [0, 5]
-      - task: belebele_por_Latn
+      - task: belebele_lvs_Latn
         n_shots: [0, 5]
-      - task: belebele_nld_Latn
+      - task: belebele_lit_Latn
+        n_shots: [0, 5]
+      - task: belebele_mlt_Latn
         n_shots: [0, 5]
       - task: belebele_pol_Latn
         n_shots: [0, 5]
+      - task: belebele_por_Latn
+        n_shots: [0, 5]
       - task: belebele_ron_Latn
+        n_shots: [0, 5]
+      - task: belebele_slk_Latn
+        n_shots: [0, 5]
+      - task: belebele_slv_Latn
+        n_shots: [0, 5]
+      - task: belebele_spa_Latn
         n_shots: [0, 5]
       - task: belebele_swe_Latn
         n_shots: [0, 5]
