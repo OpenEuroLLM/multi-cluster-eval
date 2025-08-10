@@ -268,13 +268,15 @@ class TestInteractiveCSVBuilder:
         with tempfile.TemporaryDirectory() as tmpdir:
             nested_path = Path(tmpdir) / "nested" / "dir" / "output.csv"
 
-            with patch(
-                "oellm.interactive_csv_builder.questionary.select"
-            ) as mock_select, patch(
-                "oellm.interactive_csv_builder.questionary.text"
-            ) as mock_text, patch(
-                "oellm.interactive_csv_builder.questionary.confirm"
-            ) as mock_confirm:
+            with (
+                patch(
+                    "oellm.interactive_csv_builder.questionary.select"
+                ) as mock_select,
+                patch("oellm.interactive_csv_builder.questionary.text") as mock_text,
+                patch(
+                    "oellm.interactive_csv_builder.questionary.confirm"
+                ) as mock_confirm,
+            ):
                 mock_select.return_value.ask.side_effect = [
                     "➕ Add a model",
                     "✅ Continue to tasks",

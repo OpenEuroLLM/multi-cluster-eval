@@ -1,0 +1,57 @@
+name: Update LM-Eval Task Mappings
+
+on:
+  schedule:
+    # Run weekly on Sundays at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  extract-mappings:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    
+    - name: Install dependencies
+      run: |
+        pip install lm-eval datasets huggingface-hub
+    
+    - name: Extract task mappings
+      run: |
+        python scripts/extract_task_mappings.py
+    
+    - name: Update Gist
+      env:
+        GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+        GIST_ID: ${{ secrets.GIST_ID }}
+      run: |
+        # Read the generated JSON file
+        CONTENT=$(cat task_mappings.json)
+        
+        # Escape special characters for JSON
+        ESCAPED_CONTENT=$(echo "$CONTENT" | jq -Rs .)
+        
+        # Create the gist update payload
+        cat > payload.json <<EOF
+        {
+          "files": {
+            "lm_eval_task_mappings.json": {
+              "content": $ESCAPED_CONTENT
+            }
+          }
+        }
+        EOF
+        
+        # Update the gist
+        curl -X PATCH \
+          -H "Authorization: token $GIST_TOKEN" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/gists/$GIST_ID \
+          -d @payload.json

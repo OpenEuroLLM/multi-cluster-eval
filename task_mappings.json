@@ -1,0 +1,67 @@
+{
+  "tasks": {
+    "hellaswag": {
+      "duration_minutes": 20,
+      "datasets": [
+        {
+          "dataset_path": "Rowan/hellaswag",
+          "dataset_name": null
+        }
+      ]
+    },
+    "mmlu": {
+      "duration_minutes": 180,
+      "datasets": [
+        {
+          "dataset_path": "cais/mmlu",
+          "dataset_name": "all"
+        }
+      ]
+    },
+    "arc_easy": {
+      "duration_minutes": 15,
+      "datasets": [
+        {
+          "dataset_path": "allenai/ai2_arc",
+          "dataset_name": "ARC-Easy"
+        }
+      ]
+    },
+    "arc_challenge": {
+      "duration_minutes": 20,
+      "datasets": [
+        {
+          "dataset_path": "allenai/ai2_arc",
+          "dataset_name": "ARC-Challenge"
+        }
+      ]
+    },
+    "truthfulqa": {
+      "duration_minutes": 30,
+      "datasets": [
+        {
+          "dataset_path": "truthfulqa/truthful_qa",
+          "dataset_name": "generation"
+        }
+      ]
+    },
+    "gsm8k": {
+      "duration_minutes": 25,
+      "datasets": [
+        {
+          "dataset_path": "openai/gsm8k",
+          "dataset_name": "main"
+        }
+      ]
+    },
+    "winogrande": {
+      "duration_minutes": 15,
+      "datasets": [
+        {
+          "dataset_path": "allenai/winogrande",
+          "dataset_name": "winogrande_xl"
+        }
+      ]
+    }
+  }
+}
