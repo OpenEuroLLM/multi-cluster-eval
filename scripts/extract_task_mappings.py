@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-"""
-Extract task-to-dataset mappings from lm-eval library.
-This script generates a JSON file containing all task metadata including
-dataset paths, subtask counts, and download configurations.
-"""
-
 import json
 import logging
 from pathlib import Path
