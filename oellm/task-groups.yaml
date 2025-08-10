@@ -33,48 +33,48 @@ task_groups:
     description: "Belebele European language tasks"
     tasks:
       - task: belebele_bul_Cyrl
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_hrv_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_ces_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_dan_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_nld_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_eng_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_est_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_fin_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_fra_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_deu_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_ell_Grek
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_hun_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_ita_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_lvs_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_lit_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_mlt_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_pol_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_por_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_ron_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_slk_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_slv_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_spa_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
       - task: belebele_swe_Latn
-        n_shots: [0, 5]
+        n_shots: [0]
