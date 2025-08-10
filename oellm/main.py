@@ -17,6 +17,8 @@ from rich import box
 from rich.console import Console
 from rich.logging import RichHandler
 
+from oellm.task_mappings import download_task_datasets, get_task_duration
+
 
 def ensure_singularity_image(image_name: str) -> None:
     # TODO: switch to OELLM dataset repo once it is created
@@ -275,24 +277,6 @@ def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
     return processed_model_paths
 
 
-def _calculate_task_minutes(task_name: str, base_minutes_per_subtask: int = 5) -> int:
-    """Calculate estimated minutes for a task."""
-    from oellm.task_mappings import calculate_task_minutes
-
-    return calculate_task_minutes(task_name, base_minutes_per_subtask)
-
-
-def _pre_download_task_datasets(tasks: Iterable[str]) -> None:
-    """Ensure that all datasets required by the given `tasks` are present in the local 🤗 cache at $HF_HOME."""
-    from oellm.task_mappings import download_task_datasets
-
-    # Convert to list and remove duplicates
-    unique_tasks = list({str(task) for task in tasks if isinstance(task, str)})
-
-    if unique_tasks:
-        download_task_datasets(unique_tasks, force_download=False)
-
-
 def schedule_evals(
     models: str | None = None,
     tasks: str | None = None,
@@ -436,10 +420,10 @@ def schedule_evals(
         logging.warning("No evaluation jobs to schedule.")
         return None
 
-    # Ensure that all datasets required by the tasks are cached locally to avoid
-    # network access on compute nodes.
     if not skip_checks:
-        _pre_download_task_datasets(df["task_path"].unique())
+        unique_tasks = list({str(task) for task in df["task_path"].unique()})
+        if unique_tasks:
+            download_task_datasets(unique_tasks)
     else:
         logging.info("Skipping dataset pre-download (--skip-checks enabled)")
 
@@ -493,7 +477,7 @@ def schedule_evals(
         for _, row in df.iterrows():
             task_name = row["task_path"]
             if task_name not in task_time_cache:
-                task_time_cache[task_name] = _calculate_task_minutes(task_name)
+                task_time_cache[task_name] = get_task_duration(task_name)
             total_minutes += task_time_cache[task_name]
 
         # Calculate average minutes per eval for logging purposes

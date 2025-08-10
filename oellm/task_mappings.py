@@ -1,8 +1,3 @@
-"""
-Utility module for fetching task mappings from GitHub repository.
-This replaces the direct dependency on lm-eval for task metadata.
-"""
-
 import json
 import logging
 import os
@@ -56,14 +51,8 @@ def get_task_datasets(task_name: str) -> list[dict[str, Any]]:
     return task_info.get("datasets", [])
 
 
-def download_task_datasets(tasks: list[str], force_download: bool = False) -> None:
-    """
-    Download datasets for the given tasks using the task mappings.
-
-    Args:
-        tasks: List of task names
-        force_download: Force re-download even if cached
-    """
+def download_task_datasets(tasks: list[str]) -> None:
+    """Download datasets for the given tasks using the task mappings."""
     from datasets import DownloadMode, load_dataset
     from huggingface_hub import snapshot_download
 
@@ -92,11 +81,7 @@ def download_task_datasets(tasks: list[str], force_download: bool = False) -> No
 
             try:
                 # Try to download/cache the dataset
-                download_mode = (
-                    DownloadMode.FORCE_REDOWNLOAD
-                    if force_download
-                    else DownloadMode.REUSE_DATASET_IF_EXISTS
-                )
+                download_mode = DownloadMode.REUSE_DATASET_IF_EXISTS
 
                 # Prepare load arguments
                 load_args = {
@@ -131,17 +116,3 @@ def download_task_datasets(tasks: list[str], force_download: bool = False) -> No
                     logging.warning(
                         f"Failed to download dataset for task '{task_name}': {e}, {e2}"
                     )
-
-
-def calculate_task_minutes(task_name: str, base_minutes_per_subtask: int = 5) -> int:
-    """
-    Get estimated minutes for a task.
-
-    Args:
-        task_name: Name of the task
-        base_minutes_per_subtask: Ignored (kept for compatibility)
-
-    Returns:
-        Estimated total minutes for the task
-    """
-    return get_task_duration(task_name)
