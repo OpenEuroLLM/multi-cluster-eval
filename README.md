@@ -3,9 +3,9 @@
 A package for running OELLM CLI workflows across multiple HPC clusters using SLURM job arrays and Singularity containers. 
 
 ## Currently supported workflows
-- Schedule evaluations on multiple models and tasks on all clusters ✅
-- Restart failed evaluations (e.g., due to node failures) ✅
-- Interactive eval job/csv builder ✅
+- Schedule evaluations on multiple models and tasks on all clusters ✅ `oellm schedule-eval ...`
+- Restart failed evaluations (e.g., due to node failures) ✅ `oellm collect-results ... --reschedule true`
+- Interactive eval job/csv builder ✅ `oellm build-csv`
 
 ## Planned workflows
 - Sync and download evaluation results from all clusters via a shared data layer
