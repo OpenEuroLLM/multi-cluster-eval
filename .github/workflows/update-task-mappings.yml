@@ -1,0 +1,51 @@
+name: Update LM-Eval Task Mappings
+
+on:
+  schedule:
+    # Run weekly on Sundays at 00:00 UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:  # Allow manual triggering
+  push:
+    branches:
+      - lm-eval-dependency
+
+jobs:
+  extract-mappings:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+      with: 
+        version: latest
+    
+    - name: Install dependencies
+      run: |
+        uv venv --python 3.12 && source .venv/bin/activate
+        uv pip install lm-eval datasets huggingface-hub
+    
+    - name: Extract task mappings
+      run: |
+        export HF_TOKEN=${{ secrets.HF_TOKEN }}
+        uv run scripts/extract_task_mappings.py
+    
+    - name: Check for changes
+      id: changes
+      run: |
+        if git diff --quiet task_mappings.json; then
+          echo "changed=false" >> $GITHUB_OUTPUT
+        else
+          echo "changed=true" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Commit and push changes
+      if: steps.changes.outputs.changed == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add task_mappings.json
+        git commit -m "chore: update task mappings from lm-eval"
+        git push

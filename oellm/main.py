@@ -3,11 +3,11 @@ import os
 import re
 import socket
 import subprocess
+from collections.abc import Iterable
 from datetime import datetime
 from itertools import product
 from pathlib import Path
 from string import Template
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -16,6 +16,8 @@ from jsonargparse import auto_cli
 from rich import box
 from rich.console import Console
 from rich.logging import RichHandler
+
+from oellm.task_mappings import download_task_datasets, get_task_duration
 
 
 def ensure_singularity_image(image_name: str) -> None:
@@ -275,101 +277,6 @@ def _process_model_paths(models: Iterable[str]) -> dict[str, list[Path | str]]:
     return processed_model_paths
 
 
-def _count_task_subtasks(task_name: str, task_manager) -> int:
-    from lm_eval.evaluator_utils import get_subtask_list  # type: ignore
-
-    task_objects = task_manager.load_task_or_group(task_name)
-    subtask_dict = get_subtask_list(task_objects)
-
-    total_subtasks = 0
-    for _, subtask_list in subtask_dict.items():
-        total_subtasks += len(subtask_list)
-
-    return max(1, total_subtasks)  # At least 1 subtask
-
-
-def _calculate_task_minutes(
-    task_name: str, task_manager, base_minutes_per_subtask: int = 5
-) -> int:
-    """Calculate estimated minutes for a task based on its subtask count."""
-    subtask_count = _count_task_subtasks(task_name, task_manager)
-
-    # Special handling for known multi-language tasks that take longer per subtask
-    known_complex_tasks = {
-        "belebele": 8,  # Multi-language reading comprehension, slower per subtask
-        "flores": 6,  # Translation task, moderately complex
-        "xnli": 6,  # Cross-lingual NLI
-        "xcopa": 6,  # Cross-lingual COPA
-        "xstory_cloze": 6,  # Cross-lingual story cloze
-        "paws-x": 6,  # Cross-lingual paraphrase detection
-        "hellaswag": 20,  # Hellaswag task, needs 20 minutes per subtask
-    }
-
-    # Use task-specific timing if available, otherwise use default
-    minutes_per_subtask = known_complex_tasks.get(
-        task_name.lower(), base_minutes_per_subtask
-    )
-
-    # Calculate total time: (subtasks × time_per_subtask) + base_overhead
-    base_overhead = 3  # Base overhead for task setup/teardown
-    total_minutes = max(10, (subtask_count * minutes_per_subtask) + base_overhead)
-
-    # Log for complex tasks (>5 subtasks) or any known complex task
-    if subtask_count > 5 or task_name.lower() in known_complex_tasks:
-        complexity_note = (
-            f" (known complex task, {minutes_per_subtask} min/subtask)"
-            if task_name.lower() in known_complex_tasks
-            else ""
-        )
-        logging.info(
-            f"📊 Task '{task_name}' has {subtask_count} subtasks{complexity_note}, "
-            f"estimated time: {total_minutes} minutes ({total_minutes / 60:.1f} hours)"
-        )
-
-    return total_minutes
-
-
-def _pre_download_task_datasets(tasks: Iterable[str]) -> None:
-    """Ensure that all datasets required by the given `tasks` are present in the local 🤗 cache at $HF_HOME."""
-
-    from datasets import DownloadMode  # type: ignore
-    from lm_eval.tasks import TaskManager  # type: ignore
-
-    processed: set[str] = set()
-
-    tm = TaskManager()
-
-    for task_name in tasks:
-        if not isinstance(task_name, str) or task_name in processed:
-            continue
-        processed.add(task_name)
-
-        logging.info(
-            f"Preparing dataset for task '{task_name}' (download if not cached)…"
-        )
-
-        # Instantiating the task downloads the dataset (or reuses cache)
-        task_objects = tm.load_task_or_group(task_name)
-
-        # Some entries might be nested dictionaries (e.g., groups)
-        stack = [task_objects]
-        while stack:
-            current = stack.pop()
-            if isinstance(current, dict):
-                stack.extend(current.values())
-                continue
-            if hasattr(current, "download") and callable(current.download):
-                try:
-                    current.download(download_mode=DownloadMode.REUSE_DATASET_IF_EXISTS)  # type: ignore[arg-type]
-                except TypeError as e:
-                    logging.error(
-                        f"Failed to download dataset for task '{task_name}' with download_mode=REUSE_DATASET_IF_EXISTS: {e}"
-                    )
-                    current.download()  # type: ignore[misc]
-
-        logging.debug(f"Finished dataset preparation for task '{task_name}'.")
-
-
 def schedule_evals(
     models: str | None = None,
     tasks: str | None = None,
@@ -513,10 +420,10 @@ def schedule_evals(
         logging.warning("No evaluation jobs to schedule.")
         return None
 
-    # Ensure that all datasets required by the tasks are cached locally to avoid
-    # network access on compute nodes.
     if not skip_checks:
-        _pre_download_task_datasets(df["task_path"].unique())
+        unique_tasks = list({str(task) for task in df["task_path"].unique()})
+        if unique_tasks:
+            download_task_datasets(unique_tasks)
     else:
         logging.info("Skipping dataset pre-download (--skip-checks enabled)")
 
@@ -563,10 +470,6 @@ def schedule_evals(
 
     # Calculate time based on actual task complexity (subtask count)
     if not skip_checks:
-        from lm_eval.tasks import TaskManager  # type: ignore
-
-        shared_task_manager = TaskManager()
-
         # Calculate total minutes by considering each unique task's complexity
         total_minutes = 0
         task_time_cache = {}  # Cache to avoid recalculating for same tasks
@@ -574,9 +477,7 @@ def schedule_evals(
         for _, row in df.iterrows():
             task_name = row["task_path"]
             if task_name not in task_time_cache:
-                task_time_cache[task_name] = _calculate_task_minutes(
-                    task_name, task_manager=shared_task_manager
-                )
+                task_time_cache[task_name] = get_task_duration(task_name)
             total_minutes += task_time_cache[task_name]
 
         # Calculate average minutes per eval for logging purposes

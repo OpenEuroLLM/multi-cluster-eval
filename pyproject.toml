@@ -9,8 +9,6 @@ dependencies = [
     "jsonargparse[all]",
     "datasets<4.0.0",
     "rich",
-    "torch",
-    "lm-eval",
     "huggingface_hub",
     "pyyaml",
     "questionary",
@@ -26,24 +24,11 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "oellm"
 module-root = ""
-include = ["oellm/clusters.yaml"]
-
-[tool.uv.sources]
-torch = [
-    { index = "pytorch-cpu" },
-]
-torchvision = [
-    { index = "pytorch-cpu" },
-]
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true
+include = ["oellm/clusters.yaml", "oellm/template.sbatch"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py38"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = [
