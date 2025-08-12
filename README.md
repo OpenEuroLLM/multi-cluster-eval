@@ -6,6 +6,8 @@ A package for running OELLM CLI workflows across multiple HPC clusters using SLU
 - Schedule evaluations on multiple models and tasks on all clusters ✅ `oellm schedule-eval ...`
 - Restart failed evaluations (e.g., due to node failures) ✅ `oellm collect-results ... --reschedule true`
 - Interactive eval job/csv builder ✅ `oellm build-csv`
+  - Recursively resolve local paths: pass a directory containing models and their nested intermediate checkpoints, will eval all checkpoints
+  - Support default task groups (cf `oellm/task-groups.yaml`)
 
 ## Planned workflows
 - Sync and download evaluation results from all clusters via a shared data layer
