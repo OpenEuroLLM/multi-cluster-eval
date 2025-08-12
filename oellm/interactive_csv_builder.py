@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import questionary
+import yaml
 from questionary import Style
 from rich import box
 from rich.console import Console
@@ -117,11 +118,28 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
     task_configs = []
     add_more = True
 
+    # Load task groups from YAML file
+    task_groups_file = Path(__file__).parent / "task-groups.yaml"
+    task_groups = {}
+    if task_groups_file.exists():
+        try:
+            with open(task_groups_file) as f:
+                data = yaml.safe_load(f)
+                task_groups = data.get("task_groups", {})
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not load task groups: {e}[/yellow]")
+
     while add_more:
-        action = questionary.select(
-            "What would you like to do?",
-            choices=[
-                "➕ Add a task",
+        choices = [
+            "➕ Add a single task",
+        ]
+
+        # Add task group options if available
+        if task_groups:
+            choices.insert(0, "📦 Use a default task group")
+
+        choices.extend(
+            [
                 "📋 View current tasks"
                 if task_configs
                 else questionary.Choice(
@@ -132,7 +150,12 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
                 else questionary.Choice(
                     "✅ Continue to preview", disabled="Add at least one task first"
                 ),
-            ],
+            ]
+        )
+
+        action = questionary.select(
+            "What would you like to do?",
+            choices=choices,
             style=custom_style,
         ).ask()
 
@@ -140,7 +163,61 @@ def build_csv_interactive(output_path: str = "eval_config.csv") -> None:
             console.print("\n[yellow]Cancelled by user.[/yellow]")
             return
 
-        if action == "➕ Add a task":
+        if action == "📦 Use a default task group":
+            # Show available task groups
+            group_choices = []
+            for group_name, group_data in task_groups.items():
+                description = group_data.get("description", "")
+                group_choices.append(f"{group_name} - {description}")
+
+            selected_groups = questionary.checkbox(
+                "Select task groups (↑↓ to navigate, SPACE to check/uncheck, ENTER when done):",
+                choices=group_choices,
+                style=custom_style,
+                instruction="Use SPACEBAR to select groups, not typing text",
+            ).ask()
+
+            if selected_groups is None:
+                console.print("\n[yellow]Cancelled by user.[/yellow]")
+                return
+
+            # Only process if groups were actually selected
+            if selected_groups:
+                # Add tasks from selected groups
+                for selection in selected_groups:
+                    group_name = selection.split(" - ")[0]
+                    group_data = task_groups[group_name]
+
+                    console.print(f"\n[cyan]Adding tasks from '{group_name}':[/cyan]")
+                    for task_item in group_data.get("tasks", []):
+                        task_name = task_item["task"]
+                        n_shots = task_item.get("n_shots", [0])
+                        task_configs.append((task_name, n_shots))
+                        console.print(
+                            f"  [green]✓ Added: {task_name} with n_shot={n_shots}[/green]"
+                        )
+
+                # After adding task groups, ask if user wants to add more or proceed
+                proceed_choice = questionary.select(
+                    "\nTask groups added. What would you like to do?",
+                    choices=[
+                        "✅ Continue to preview",
+                        "➕ Add more tasks",
+                    ],
+                    style=custom_style,
+                ).ask()
+
+                if proceed_choice is None:
+                    console.print("\n[yellow]Cancelled by user.[/yellow]")
+                    return
+
+                if proceed_choice == "✅ Continue to preview":
+                    add_more = False
+                # If user chooses "Add more tasks", the loop continues
+            else:
+                console.print("\n[yellow]No task groups selected.[/yellow]")
+
+        elif action == "➕ Add a single task":
             # Direct task input
             task = questionary.text("Enter task name:", style=custom_style).ask()
             if task is None:

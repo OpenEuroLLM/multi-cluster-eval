@@ -26,7 +26,7 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "oellm"
 module-root = ""
-include = ["oellm/clusters.yaml"]
+include = ["oellm/clusters.yaml", "oellm/task-groups.yaml"]
 
 [tool.uv.sources]
 torch = [
