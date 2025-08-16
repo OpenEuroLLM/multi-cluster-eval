@@ -329,7 +329,9 @@ def _calculate_task_minutes(
     return total_minutes
 
 
-def _pre_download_task_datasets(tasks: Iterable[str]) -> None:
+def _pre_download_task_datasets(
+    tasks: Iterable[str], trust_remote_code: bool = True
+) -> None:
     """Ensure that all datasets required by the given `tasks` are present in the local 🤗 cache at $HF_HOME."""
 
     from datasets import DownloadMode  # type: ignore
@@ -349,7 +351,13 @@ def _pre_download_task_datasets(tasks: Iterable[str]) -> None:
         )
 
         # Instantiating the task downloads the dataset (or reuses cache)
-        task_objects = tm.load_task_or_group(task_name)
+
+        task_config = {
+            "task": task_name,
+            "dataset_kwargs": {"trust_remote_code": trust_remote_code},
+        }
+
+        task_objects = tm.load_config(task_config)
 
         # Some entries might be nested dictionaries (e.g., groups)
         stack = [task_objects]
@@ -381,6 +389,7 @@ def schedule_evals(
     download_only: bool = False,
     dry_run: bool = False,
     skip_checks: bool = False,
+    trust_remote_code: bool = True,
 ) -> None:
     """
     Schedule evaluation jobs for a given set of models, tasks, and number of shots.
@@ -404,6 +413,7 @@ def schedule_evals(
         download_only: If True, only download the datasets and models and exit.
         dry_run: If True, generate the SLURM script but don't submit it to the scheduler.
         skip_checks: If True, skip container image, model validation, and dataset pre-download checks for faster execution.
+        trust_remote_code: If True, trust remote code when downloading datasets. Default is True. Workflow might fail if set to False.
     """
     _setup_logging(verbose)
 
@@ -516,7 +526,9 @@ def schedule_evals(
     # Ensure that all datasets required by the tasks are cached locally to avoid
     # network access on compute nodes.
     if not skip_checks:
-        _pre_download_task_datasets(df["task_path"].unique())
+        _pre_download_task_datasets(
+            df["task_path"].unique(), trust_remote_code=trust_remote_code
+        )
     else:
         logging.info("Skipping dataset pre-download (--skip-checks enabled)")
 
